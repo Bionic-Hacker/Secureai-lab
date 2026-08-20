@@ -1,0 +1,210 @@
+================================================================================
+SecureAI Lab — Phase 2 Setup Walkthrough (Linux Terminal)
+================================================================================
+This covers merging Phase 2 (secure document upload) into your EXISTING
+Phase 1 project without losing your real, already-configured .env file, a
+breaking config change you need to handle, rebuilding, and reconciling the
+new database migration. Read this all the way through once before running
+anything — the order matters.
+
+--------------------------------------------------------------------------------
+WHAT'S NEW IN PHASE 2
+--------------------------------------------------------------------------------
+- Document upload API: POST /api/v1/documents (multipart file upload)
+- Validation: filename sanitization, extension allow-list, magic-byte
+  content-type verification (catches a renamed .exe pretending to be .pdf)
+- Malware scanning via the ClamAV container from Phase 1 — fail-closed
+  (if ClamAV is unreachable, uploads are rejected, not silently accepted)
+- AES-256-GCM encryption of file contents at rest
+- A storage abstraction: local disk (default) or any S3-compatible bucket
+- Object-level permissions: owner + explicit sharing, enforced on every
+  read/download/share/delete — not inferred from role alone
+- 21 new tests covering all of the above
+
+--------------------------------------------------------------------------------
+STEP 1 — Download and stage the update (don't extract onto your real project yet)
+--------------------------------------------------------------------------------
+Download secureai-lab-phase2.tar.gz from the chat, then, from wherever it
+landed (probably ~/Downloads):
+
+    $ mkdir -p ~/secureai-lab-phase2-staging
+    $ tar -xzf ~/Downloads/secureai-lab-phase2.tar.gz -C ~/secureai-lab-phase2-staging
+
+  - `mkdir -p` creates the staging folder (the -p flag means "don't error
+    if it already exists, and create any missing parent folders too").
+  - `tar -xzf ARCHIVE -C DEST` extracts (x) a gzipped (z) tar file (f) into
+    DEST instead of the current directory. This creates
+    ~/secureai-lab-phase2-staging/secureai-lab/... — a complete, separate
+    copy, untouched from your real project so far.
+
+We stage first, rather than extracting straight onto your real project,
+specifically so nothing gets overwritten until you've confirmed the merge
+step below does what you expect.
+
+--------------------------------------------------------------------------------
+STEP 2 — Merge into your real project (your real .env is safe — here's why)
+--------------------------------------------------------------------------------
+First, confirm your real project's path (you already found this with the
+docker-compose.yml search earlier):
+
+    $ REAL=/path/to/your/real/secureai-lab1
+    $ echo $REAL
+
+Now merge the staged update into it:
+
+    $ cd ~/secureai-lab-phase2-staging/secureai-lab
+    $ cp -r . "$REAL/"
+
+  - `cp -r . "$REAL/"` copies everything in the current directory (the `.`)
+    — including hidden files like .gitignore — into your real project,
+    overwriting any file that exists in both places and adding every new
+    Phase 2 file. It does NOT delete anything in $REAL that isn't part of
+    this update.
+  - Your real backend/.env is never touched by this copy, for a simple
+    reason: it was never part of any package I've sent you. .env is
+    excluded via .gitignore specifically so real secrets never end up in
+    something distributable — I only ever generate .env.example (a
+    template) and .env.test (test-only, fake credentials). Since your real
+    backend/.env doesn't exist in the source being copied, cp has nothing
+    to overwrite it with, and leaves it exactly as-is.
+
+Confirm the merge worked:
+
+    $ ls "$REAL/backend/app/services/document_service.py"
+    $ ls "$REAL/backend/tests/test_documents.py"
+
+Both should print the file path back with no "No such file" error.
+
+--------------------------------------------------------------------------------
+STEP 3 — Fix your real .env: FIELD_ENCRYPTION_KEY changed format (BREAKING)
+--------------------------------------------------------------------------------
+This is the one step that isn't optional. Phase 2 adds file encryption
+using AES-256-GCM, which needs a raw 32-byte key. Back in Phase 1, I had
+you generate FIELD_ENCRYPTION_KEY in a different format (Fernet-style,
+44-character base64) — at the time it wasn't actually used anywhere yet,
+so it didn't matter. Now it is used, and there's a validator in
+backend/app/core/config.py that will refuse to start the backend at all
+if this value isn't a real 64-character hex string.
+
+Generate a new one:
+
+    $ openssl rand -hex 32
+
+Open your REAL .env (not .env.example, not .env.test):
+
+    $ nano "$REAL/.env"
+
+Find the line starting with FIELD_ENCRYPTION_KEY= and replace the value
+with what you just generated. It should end up looking like:
+
+    FIELD_ENCRYPTION_KEY=a1b2c3d4...(64 hex characters total, no quotes)
+
+Save (Ctrl+O, Enter) and exit (Ctrl+X). If you skip this step, the backend
+container will crash on startup with a validation error rather than
+silently doing something insecure — that's deliberate (see config.py's
+_validate_field_encryption_key), but it means Step 5 won't work until this
+is fixed.
+
+Optional, not required (these all have safe defaults if you leave them
+out): STORAGE_BACKEND, S3_BUCKET, S3_ENDPOINT_URL, S3_REGION,
+S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, UPLOAD_RATE_LIMIT_PER_MINUTE. You
+only need these if you want to point file storage at S3/R2/Spaces instead
+of the local Docker volume — skip them for now.
+
+--------------------------------------------------------------------------------
+STEP 4 — Rebuild (Dockerfile and requirements.txt both changed)
+--------------------------------------------------------------------------------
+Phase 2 adds new Python packages (python-magic, boto3) and a new system
+library the backend image needs (libmagic1, for content-type detection).
+
+    $ cd "$REAL"
+    $ docker compose up --build -d backend
+
+Watch it come up clean:
+
+    $ docker compose logs -f backend
+
+Press Ctrl+C once you see it settle into normal request logging (or just
+the healthcheck hitting /healthz repeatedly) with no crash-loop.
+
+--------------------------------------------------------------------------------
+STEP 5 — Reconcile the new migration (documents / document_permissions)
+--------------------------------------------------------------------------------
+Same situation as Phase 1's schema.sql gotcha, one more time: your
+database's documents and document_permissions tables almost certainly
+already exist, because Phase 1's schema.sql (which included them as a
+"Phase 2 preview") auto-ran on your Postgres container's first boot.
+Alembic doesn't know that happened yet.
+
+Also new in Phase 2: docker-compose.yml no longer mounts schema.sql into
+Postgres's init directory at all — from here on, Alembic migrations are
+the only thing that creates schema, for any future phase. schema.sql
+itself now exists purely as a readable reference of the full target
+schema (see the comment at the top of database/schema.sql) — nothing runs
+it automatically anymore. This doesn't affect your existing database
+(that already-mounted behavior only ever runs once, on a brand-new empty
+volume), it just prevents the same schema.sql/Alembic drift from
+happening again in Phase 3 onward.
+
+Check what you actually have:
+
+    $ docker compose exec db psql -U secureai_app -d secureai_lab -c "\dt"
+
+If `documents` and `document_permissions` are already in that list, stamp
+instead of running the migration's CREATE TABLE statements again:
+
+    $ docker compose exec backend alembic stamp head
+
+If they're NOT in that list (empty database, or you'd previously stripped
+schema.sql down), run the real migration instead:
+
+    $ docker compose exec backend alembic upgrade head
+
+--------------------------------------------------------------------------------
+STEP 6 — Try an upload for real
+--------------------------------------------------------------------------------
+Reuse the $TOKEN pattern from the Phase 1 walkthrough (register/login,
+capture access_token). Then:
+
+    $ curl -s -X POST http://localhost:8080/api/v1/documents \
+        -H "Authorization: Bearer $TOKEN" \
+        -F "file=@/etc/hostname;type=text/plain;filename=test-upload.txt"
+
+    - `-F "file=@PATH;type=...;filename=..."` builds a multipart/form-data
+      upload — the format the endpoint expects for file uploads (different
+      from the -H/-d JSON pattern used for login/register). `@/etc/hostname`
+      just picks a small, harmless text file already on your system to
+      upload as a quick test; use any real file you want instead.
+
+A successful response returns the document's metadata with
+"malware_scan_status":"clean". List it back:
+
+    $ curl -s http://localhost:8080/api/v1/documents -H "Authorization: Bearer $TOKEN"
+
+--------------------------------------------------------------------------------
+STEP 7 — Run the test suite (as covered before, summarized here for reference)
+--------------------------------------------------------------------------------
+    $ cd "$REAL/backend"
+    $ python3 -m venv .venv
+    $ source .venv/bin/activate
+    $ pip install -r requirements-dev.txt
+    $ sudo apt install libmagic1        # if not already installed on your host
+
+    $ docker run --rm -d --name secureai-test-db -p 5433:5432 \
+        -e POSTGRES_PASSWORD=test -e POSTGRES_DB=secureai_lab_test postgres:16-alpine
+    $ docker run --rm -d --name secureai-test-redis -p 6380:6379 redis:7-alpine
+
+    $ pytest -v
+
+You should see 25 tests pass. When done:
+
+    $ docker stop secureai-test-db secureai-test-redis
+
+--------------------------------------------------------------------------------
+DONE WHEN...
+--------------------------------------------------------------------------------
+  [ ] docker compose logs backend shows no crash loop after rebuild
+  [ ] Step 6's curl upload returns malware_scan_status: clean
+  [ ] GET /api/v1/documents lists the file you just uploaded
+  [ ] pytest -v shows 25 passed
+================================================================================

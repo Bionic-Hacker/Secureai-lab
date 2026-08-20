@@ -1,0 +1,432 @@
+================================================================================
+SecureAI Lab — Phase 1 Setup Walkthrough (Linux Terminal)
+================================================================================
+This file walks through every step needed to get Phase 1 (repo skeleton +
+authentication system + Docker environment) running cleanly on a Linux
+machine, in order, with an explanation of every command and its flags.
+
+Where you see <angle brackets>, replace with your own value.
+Where you see a $ at the start of a line, that's the shell prompt — don't
+type the $ itself, it's just there to show "this is a command to run."
+
+--------------------------------------------------------------------------------
+STEP 0 — Confirm prerequisites are installed
+--------------------------------------------------------------------------------
+You need Docker, the Docker Compose plugin, and OpenSSL. Check each:
+
+    $ docker --version
+    $ docker compose version
+    $ openssl version
+
+Notes on syntax:
+  - `docker compose` (two words, no hyphen) is the modern Compose V2 plugin,
+    built into Docker itself. If that command isn't found but `docker-compose`
+    (one word, hyphenated) is, you have the older standalone binary — it
+    still works for everything in this guide, just substitute the hyphenated
+    form wherever you see `docker compose` below.
+  - If any of these commands say "command not found," install Docker Engine
+    + the Compose plugin via your distro's package manager before continuing
+    (e.g. on Debian/Ubuntu: `sudo apt update && sudo apt install docker.io
+    docker-compose-plugin`). OpenSSL ships with almost every Linux distro by
+    default.
+
+--------------------------------------------------------------------------------
+STEP 1 — Navigate into the project directory
+--------------------------------------------------------------------------------
+    $ cd /path/to/secureai-lab
+    $ pwd
+
+  - `cd` = "change directory." Replace /path/to/secureai-lab with wherever
+    you extracted the project (e.g. ~/projects/secureai-lab).
+  - `pwd` = "print working directory" — run this after `cd` to confirm you
+    landed in the right place. It should print the full path ending in
+    .../secureai-lab.
+  - Sanity check the structure is what you expect:
+
+    $ ls -la
+
+    `ls` lists directory contents; `-l` = long format (permissions, size,
+    owner); `-a` = show hidden files too (important here, because .env.example
+    and .gitignore start with a dot and are hidden by default).
+
+--------------------------------------------------------------------------------
+STEP 2 — Create your local .env file from the template
+--------------------------------------------------------------------------------
+    $ cp .env.example .env
+
+  - `cp SOURCE DEST` copies a file. We never edit .env.example directly —
+    it's the checked-in template with placeholder values. .env is your real,
+    local, secret-filled config file, and .gitignore already excludes it from
+    version control (check: `cat .gitignore | grep "^\.env$"`).
+
+--------------------------------------------------------------------------------
+STEP 3 — Generate real secrets (do NOT ship the placeholder values)
+--------------------------------------------------------------------------------
+Every value in .env.example that says "replace_with..." or "change_me" MUST
+be replaced with a real random value before you start containers — the app
+will actually refuse to boot with the placeholder JWT key (see
+backend/app/core/config.py, the `_reject_default_secret` validator).
+
+3a. JWT signing secret (needs to be long and random):
+
+    $ openssl rand -hex 64
+
+    `openssl rand -hex N` prints N bytes of cryptographically random data,
+    hex-encoded (so the output string is 2×N characters long). Copy the
+    entire output — you'll paste it in as JWT_SECRET_KEY in the next step.
+
+3b. Fernet encryption keys (used for MFA_ENCRYPTION_KEY and
+    FIELD_ENCRYPTION_KEY — these must be valid Fernet keys, not just any
+    random string, because the app uses the `cryptography` library's Fernet
+    scheme to encrypt/decrypt them):
+
+    $ python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+
+    Run this TWICE — you need two different keys, one for MFA_ENCRYPTION_KEY
+    and a separate one for FIELD_ENCRYPTION_KEY. Never reuse the same key
+    for both.
+
+    If that command errors with "ModuleNotFoundError: No module named
+    'cryptography'", you don't have the Python package installed on your
+    host machine (that's fine — it's installed inside the Docker image, just
+    not necessarily on your host). Two options:
+
+    Option A — install it locally just to generate the keys:
+        $ pip install cryptography --break-system-packages
+        (The --break-system-packages flag is required on newer Debian/Ubuntu
+        systems that block pip from installing outside a virtual environment
+        by default. This is a one-time, throwaway install just to run the
+        key-generation command above.)
+
+    Option B — generate it without installing anything, using a temporary
+    container built from the same Python image the project uses:
+        $ docker run --rm python:3.12-slim-bookworm sh -c \
+          "pip install --quiet cryptography && python3 -c \
+          \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+
+        `docker run --rm IMAGE COMMAND` starts a throwaway container, runs
+        COMMAND, prints the output, and `--rm` deletes the container
+        immediately afterward (nothing left behind). This avoids installing
+        anything on your actual machine.
+
+3c. Other random secrets (Postgres password, Grafana admin password, Chroma
+    auth token) — a plain random base64 string is fine here, no special
+    format required:
+
+    $ openssl rand -base64 24
+
+    Run this three times for POSTGRES_PASSWORD, GRAFANA_ADMIN_PASSWORD, and
+    CHROMA_AUTH_TOKEN — use a different value for each.
+
+--------------------------------------------------------------------------------
+STEP 4 — Edit .env and paste in your generated secrets
+--------------------------------------------------------------------------------
+Open the file in a terminal text editor. `nano` is the easiest if you're new
+to Linux terminal editors:
+
+    $ nano .env
+
+  Nano basics:
+    - Arrow keys move the cursor (no mouse needed, but many terminals do
+      support mouse click-to-position too).
+    - Type normally to insert text; Backspace/Delete work as expected.
+    - Ctrl+O ("Write Out") saves the file. It'll ask you to confirm the
+      filename — just press Enter to accept.
+    - Ctrl+X exits nano. If you have unsaved changes it'll prompt you to
+      save first (Y = yes, save; N = no, discard; Ctrl+C = cancel and go
+      back to editing).
+    - Ctrl+W searches the file for text — handy for jumping straight to
+      "JWT_SECRET_KEY" instead of scrolling.
+
+  Prefer vim? `vim .env`, press `i` to enter insert mode, edit, press `Esc`,
+  type `:wq` and Enter to save and quit.
+
+Replace these specific lines with your generated values from Step 3
+(the variable names on the left must stay exactly as they are — only change
+what's after the `=`):
+
+    JWT_SECRET_KEY=<paste your openssl rand -hex 64 output>
+    MFA_ENCRYPTION_KEY=<paste your first Fernet key>
+    FIELD_ENCRYPTION_KEY=<paste your second Fernet key>
+    POSTGRES_PASSWORD=<paste a base64 secret>
+    GRAFANA_ADMIN_PASSWORD=<paste a different base64 secret>
+    CHROMA_AUTH_TOKEN=<paste a different base64 secret>
+
+  *** IMPORTANT — easy mistake to make ***
+  The DATABASE_URL line further down in the file also contains the Postgres
+  password embedded in it:
+
+    DATABASE_URL=postgresql+asyncpg://secureai_app:change_me_generate_a_long_random_value@db:5432/secureai_lab
+
+  You must update the password INSIDE that URL to match the exact same
+  value you just set for POSTGRES_PASSWORD, or the backend container will
+  fail to connect to the database. So if you set:
+
+    POSTGRES_PASSWORD=Xk9mP2vQdR8sT4wZ
+
+  Then DATABASE_URL must become:
+
+    DATABASE_URL=postgresql+asyncpg://secureai_app:Xk9mP2vQdR8sT4wZ@db:5432/secureai_lab
+
+  (Leave the username `secureai_app`, host `db`, port `5432`, and database
+  name `secureai_lab` exactly as they are — only the password portion
+  changes.)
+
+  Also update OPENAI_API_KEY if you're using Feature 1 (AI Security
+  Assistant) later — not required for Phase 1, since no AI endpoints exist
+  yet, but fine to leave the placeholder for now.
+
+--------------------------------------------------------------------------------
+STEP 5 — Validate your configuration before starting anything
+--------------------------------------------------------------------------------
+    $ docker compose config
+
+  This renders the fully resolved docker-compose.yml with all your .env
+  variables substituted in, and prints it to the screen — it does NOT start
+  any containers. Use this to catch typos or missing variables before you
+  spend time building images. If a variable is missing, Compose will print
+  a warning like:
+
+    WARN[0000] The "JWT_SECRET_KEY" variable is not set. Defaulting to a blank string.
+
+  If you see any warning like that, go back to Step 4 and fix .env.
+
+--------------------------------------------------------------------------------
+STEP 6 — Build and start the stack
+--------------------------------------------------------------------------------
+    $ docker compose up --build -d
+
+  Breaking down each part:
+    - `docker compose up` starts every service defined in docker-compose.yml.
+    - `--build` forces Docker to (re)build images from the Dockerfiles
+      before starting — needed the first time, and any time you change
+      backend code or the Dockerfile itself. Without it, Compose would just
+      reuse a previously-built image (or fail if none exists yet).
+    - `-d` = "detached" mode — containers run in the background and you get
+      your terminal prompt back immediately, instead of streaming logs from
+      every container forever.
+
+  If you'd rather watch the boot logs live the first time (useful for
+  catching errors immediately), drop the -d flag:
+
+    $ docker compose up --build
+
+  In that mode, all container logs stream to your terminal continuously.
+  Press Ctrl+C to stop everything (this actually stops the containers, not
+  just your view of them — different from Step 7's `logs -f`).
+
+--------------------------------------------------------------------------------
+STEP 7 — Check that everything is healthy
+--------------------------------------------------------------------------------
+    $ docker compose ps
+
+  Lists every service, its status (Up / Exited / Restarting), and health
+  check state (healthy / unhealthy / starting). You want to see all
+  services as "Up" and the ones with healthchecks (db, backend) as
+  "healthy" before moving on.
+
+  To watch logs from one specific service without stopping it:
+
+    $ docker compose logs -f backend
+
+    - `logs` shows a container's output.
+    - `-f` = "follow" — like `tail -f`, it keeps streaming new log lines as
+      they happen instead of just printing what's already there and exiting.
+    - `backend` is the service name from docker-compose.yml — swap in `db`,
+      `redis`, `clamav`, `vector-db`, `nginx`, `prometheus`, or `grafana` to
+      watch any other service.
+    - Press Ctrl+C to stop following (the container itself keeps running —
+      this only detaches your terminal from the log stream).
+
+  If you see the backend logging repeated 404s on GET /metrics, that means
+  you're running the code from before the metrics fix — pull the updated
+  requirements.txt and app/main.py (already patched to expose /metrics via
+  prometheus-fastapi-instrumentator), then rebuild just that service:
+
+    $ docker compose up --build -d backend
+
+    Adding a service name (`backend`) after the compose command restricts
+    the build/restart to just that one container instead of the whole stack.
+
+--------------------------------------------------------------------------------
+STEP 8 — Reconcile the database schema with Alembic
+--------------------------------------------------------------------------------
+Background: the Postgres container auto-runs database/schema.sql the very
+first time its data volume is created (Postgres's official image executes
+any .sql file it finds in /docker-entrypoint-initdb.d on first boot only).
+That means your tables likely already exist. Alembic (the migration tool)
+doesn't know that yet, though — it tracks its own version state in a table
+called alembic_version, which schema.sql doesn't create. You need to tell
+Alembic "the schema is already at revision 0001," rather than trying to
+create the tables a second time.
+
+Check whether the tables already exist:
+
+    $ docker compose exec db psql -U secureai_app -d secureai_lab -c "\dt"
+
+    - `docker compose exec SERVICE COMMAND` runs COMMAND inside an already-
+      running container (as opposed to `docker compose run`, which starts a
+      brand-new container just to run one command).
+    - `psql` is Postgres's command-line client, already installed inside the
+      official postgres image.
+    - `-U secureai_app` = connect as that database user; `-d secureai_lab` =
+      connect to that database.
+    - `-c "\dt"` runs a single psql meta-command (\dt = "describe tables")
+      and exits, rather than dropping you into an interactive psql session.
+    - You'll be prompted for a password — use the POSTGRES_PASSWORD value
+      you set in .env.
+
+  If you see a table listing (users, refresh_tokens, audit_log, etc.),
+  the schema already exists — stamp Alembic instead of running migrations:
+
+    $ docker compose exec backend alembic stamp head
+
+    This marks the database as being at the latest migration WITHOUT
+    running any SQL — it just writes a row into alembic_version so future
+    `alembic upgrade` commands know where to start from.
+
+  If \dt instead prints "Did not find any relations" (empty), your volume
+  was fresh and schema.sql didn't get a chance to run (this can happen if
+  you'd previously started the db container without the schema.sql mount,
+  creating an empty volume that Postgres now considers "already
+  initialized" and won't re-run init scripts on). In that case, run the
+  actual migration instead:
+
+    $ docker compose exec backend alembic upgrade head
+
+  If you hit this second case, it's worth knowing why: Postgres only runs
+  /docker-entrypoint-initdb.d scripts against a brand-new, empty data
+  directory. If you want to force a truly clean re-initialization at any
+  point, you'd remove the named volume entirely — covered in the cleanup
+  section at the bottom of this file.
+
+--------------------------------------------------------------------------------
+STEP 9 — Exercise the authentication API
+--------------------------------------------------------------------------------
+The backend itself isn't published directly to your host (only nginx is,
+on port 8080) — this is intentional network segmentation from the
+architecture doc. Send requests through nginx:
+
+9a. Register a user:
+
+    $ curl -s -X POST http://localhost:8080/api/v1/auth/register \
+        -H "Content-Type: application/json" \
+        -d '{"email":"you@example.com","display_name":"Your Name","password":"Str0ng!Passw0rd123"}'
+
+    Flag breakdown:
+      -s          = "silent" — suppress curl's progress meter, show only
+                    the actual response body.
+      -X POST     = use the HTTP POST method (default is GET otherwise).
+      -H "..."    = add an HTTP header — here, telling the server the body
+                    is JSON.
+      -d '...'    = the request body. Note the single quotes around the
+                    whole JSON blob so your shell doesn't try to interpret
+                    the double quotes inside it.
+
+    A successful response returns HTTP 201 with the created user's email,
+    display name, role, etc. — no password or password_hash field, by
+    design (see UserOut schema).
+
+9b. Log in and capture the access token:
+
+    $ curl -s -X POST http://localhost:8080/api/v1/auth/login \
+        -H "Content-Type: application/json" \
+        -d '{"email":"you@example.com","password":"Str0ng!Passw0rd123"}'
+
+    The response is JSON containing access_token and refresh_token. To make
+    the next step easier, pretty-print and extract just the access token
+    using `jq` (a command-line JSON processor — install with
+    `sudo apt install jq` if you don't have it):
+
+    $ TOKEN=$(curl -s -X POST http://localhost:8080/api/v1/auth/login \
+        -H "Content-Type: application/json" \
+        -d '{"email":"you@example.com","password":"Str0ng!Passw0rd123"}' \
+        | jq -r '.access_token')
+
+    - `$(...)` is command substitution — it runs the command inside and
+      captures its output into the TOKEN shell variable.
+    - `jq -r '.access_token'` parses the JSON response and extracts just
+      the access_token field; `-r` = "raw output" (prints the string
+      without surrounding quotes).
+    - Confirm it worked: `echo $TOKEN` should print a long JWT string.
+
+9c. Call a protected endpoint using that token:
+
+    $ curl -s http://localhost:8080/api/v1/auth/me \
+        -H "Authorization: Bearer $TOKEN"
+
+    `Bearer $TOKEN` is the standard way to pass a JWT in an Authorization
+    header; `$TOKEN` expands to the value you captured in 9b. A successful
+    response echoes back your user record — this confirms the entire
+    auth chain (JWT issuance → signature verification → DB lookup → RBAC
+    dependency) is working end to end.
+
+--------------------------------------------------------------------------------
+STEP 10 — Confirm monitoring is wired up
+--------------------------------------------------------------------------------
+10a. Prometheus (now published to your host after the docker-compose.yml
+     update — bound to loopback only, matching how Postgres/Grafana are
+     exposed):
+
+     Open in a browser: http://localhost:9090/targets
+
+     You should see a target labeled "secureai-backend" with State = UP.
+     If it shows DOWN, re-check Step 7's rebuild instructions — it almost
+     always means the backend is still running the pre-fix image.
+
+10b. Grafana:
+
+     Open in a browser: http://localhost:3001
+
+     Log in with the GRAFANA_ADMIN_USER / GRAFANA_ADMIN_PASSWORD values
+     from your .env file. Dashboard provisioning is wired up in a later
+     phase (monitoring/grafana/) — for now this just confirms Grafana
+     itself is reachable and authenticating correctly.
+
+--------------------------------------------------------------------------------
+STEP 11 — Day-to-day commands you'll want going forward
+--------------------------------------------------------------------------------
+Stop everything (containers stop, but named volumes — your database data —
+are preserved):
+
+    $ docker compose down
+
+Stop everything AND delete all data volumes (full reset — you'll need to
+redo Step 8's migration/stamp step afterward, since the database comes back
+completely empty):
+
+    $ docker compose down -v
+
+    The -v flag additionally removes named volumes declared in the `volumes:`
+    section of docker-compose.yml (pgdata, chroma_data, uploads_data, etc.).
+    Use this when you want a truly clean slate, e.g. after schema changes
+    during development.
+
+Restart just one service without touching the others:
+
+    $ docker compose restart backend
+
+Rebuild and restart after you edit backend code:
+
+    $ docker compose up --build -d backend
+
+Tail logs from every service at once:
+
+    $ docker compose logs -f
+
+    (No service name = follow all of them, interleaved, prefixed by service
+    name so you can tell them apart.)
+
+--------------------------------------------------------------------------------
+STEP 12 — You're done with Phase 1 when...
+--------------------------------------------------------------------------------
+  [ ] docker compose ps shows all services Up, db and backend Healthy
+  [ ] curl to /api/v1/auth/register and /login (Step 9) succeed
+  [ ] curl to /api/v1/auth/me with a bearer token returns your user record
+  [ ] http://localhost:9090/targets shows secureai-backend as UP
+  [ ] http://localhost:3001 (Grafana) logs in successfully
+  [ ] docker compose logs backend shows no repeating error loops
+
+Once all of those check out, Phase 1 is fully operational and you're ready
+for Phase 2 (secure document upload + RAG pipeline).
+================================================================================
