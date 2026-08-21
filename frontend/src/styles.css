@@ -1,0 +1,407 @@
+﻿/* SecureAI Lab â€” intake bench
+   Evidence-room vernacular: specimen tags, ink stamps, a hash you can read.
+   Monospace carries the data because alignment of digests and byte counts is
+   the point; Archivo handles voice. */
+
+:root {
+  --paper: #e9eaef;
+  --card: #fbfbfd;
+  --ink: #14161b;
+  --slate: #626a7c;
+  --rule: #cfd3dd;
+  --stamp: #2f2aa8;
+  --clean: #146b4f;
+  --pending: #8a5a0f;
+  --flagged: #a32e22;
+
+  --gap: clamp(1rem, 2.5vw, 1.75rem);
+  --tag-radius: 3px;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(transparent 95%, rgba(20, 22, 27, 0.035) 95%),
+    linear-gradient(90deg, transparent 95%, rgba(20, 22, 27, 0.035) 95%);
+  background-size: 26px 26px;
+  color: var(--ink);
+  font-family: "Archivo", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+code, .mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
+
+.bench {
+  max-width: 74rem;
+  margin: 0 auto;
+  padding: clamp(1.5rem, 4vw, 3.5rem) var(--gap) 5rem;
+}
+
+.bench--centered {
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+}
+
+/* ---------------------------------------------------------- masthead --- */
+
+.masthead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap);
+  align-items: flex-end;
+  justify-content: space-between;
+  padding-bottom: 1.25rem;
+  border-bottom: 2px solid var(--ink);
+}
+
+.masthead__mark { display: flex; align-items: center; gap: 0.9rem; }
+
+.masthead__rule {
+  width: 2.75rem;
+  height: 2.75rem;
+  border: 2px solid var(--stamp);
+  border-radius: 50%;
+  position: relative;
+  flex: none;
+}
+
+.masthead__rule::after {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  border: 1px solid var(--stamp);
+  border-radius: 50%;
+  opacity: 0.45;
+}
+
+.masthead__title {
+  margin: 0;
+  font-size: clamp(2rem, 5vw, 3rem);
+  font-weight: 700;
+  letter-spacing: -0.045em;
+  line-height: 0.95;
+}
+
+.ledger {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.75rem;
+  margin: 0;
+}
+
+.ledger__cell dt {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.6rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--slate);
+  margin-bottom: 0.3rem;
+}
+
+.ledger__cell dd {
+  margin: 0;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 1.4rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.ledger__who {
+  font-family: "Archivo", sans-serif !important;
+  font-size: 1rem !important;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.ledger__role {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.62rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--stamp);
+}
+
+/* ------------------------------------------------------- intake slot --- */
+
+.slot {
+  margin-top: var(--gap);
+  padding: clamp(1.5rem, 3vw, 2.25rem);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.5rem;
+  background: var(--card);
+  border: 2px dashed var(--rule);
+  border-radius: var(--tag-radius);
+  transition: border-color 140ms ease, background-color 140ms ease;
+}
+
+.slot--over { border-color: var(--stamp); background: #f4f4fe; }
+.slot--busy { opacity: 0.7; }
+
+.slot__mouth { display: flex; flex-direction: column; gap: 5px; flex: none; }
+
+.slot__mouth span {
+  display: block;
+  width: 3rem;
+  height: 3px;
+  background: var(--ink);
+  opacity: 0.85;
+}
+.slot__mouth span:nth-child(2) { width: 2.1rem; opacity: 0.55; }
+.slot__mouth span:nth-child(3) { width: 2.6rem; opacity: 0.3; }
+
+.slot__copy { flex: 1 1 16rem; }
+
+.slot__lead {
+  margin: 0 0 0.3rem;
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.slot__fine {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--slate);
+  max-width: 34rem;
+}
+
+.slot__browse,
+.tag__remove {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  padding: 0.7rem 1.15rem;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.slot__browse {
+  border: 1.5px solid var(--ink);
+  background: var(--ink);
+  color: var(--card);
+}
+.slot__browse:hover:not(:disabled) { background: var(--stamp); border-color: var(--stamp); }
+.slot__browse:disabled { cursor: not-allowed; opacity: 0.5; }
+
+/* -------------------------------------------------------- the shelf ---- */
+
+.shelf {
+  margin-top: calc(var(--gap) * 1.5);
+  display: grid;
+  gap: var(--gap);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 21rem), 1fr));
+}
+
+.shelf__empty {
+  grid-column: 1 / -1;
+  padding: 3rem 1rem;
+  text-align: center;
+  color: var(--slate);
+  border-top: 1px solid var(--rule);
+}
+
+/* ------------------------------------------------------ custody tag ---- */
+
+.tag {
+  position: relative;
+  padding: 1.4rem 1.4rem 1.2rem 2.1rem;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: var(--tag-radius);
+  box-shadow: 0 1px 0 rgba(20, 22, 27, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* Perforated edge â€” the tag was torn from a book of them. */
+.tag__perf {
+  position: absolute;
+  left: 0.85rem;
+  top: 0.9rem;
+  bottom: 0.9rem;
+  width: 4px;
+  background-image: radial-gradient(circle at 2px 3px, var(--rule) 1.5px, transparent 1.6px);
+  background-size: 4px 8px;
+}
+
+.tag--clean { border-left: 4px solid var(--clean); }
+.tag--pending { border-left: 4px solid var(--pending); }
+.tag--flagged { border-left: 4px solid var(--flagged); }
+
+.tag__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.tag__name {
+  margin: 0;
+  font-size: 1.02rem;
+  font-weight: 600;
+  letter-spacing: -0.018em;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.stamp {
+  flex: none;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  padding: 0.34rem 0.55rem;
+  border: 1.5px solid currentColor;
+  border-radius: 2px;
+  transform: rotate(-2.5deg);
+  animation: settle 260ms cubic-bezier(0.2, 0.9, 0.3, 1.4);
+}
+
+.stamp--clean { color: var(--clean); }
+.stamp--pending { color: var(--pending); }
+.stamp--flagged { color: var(--flagged); }
+
+@keyframes settle {
+  from { transform: rotate(-14deg) scale(1.5); opacity: 0; }
+  to { transform: rotate(-2.5deg) scale(1); opacity: 1; }
+}
+
+.tag__facts {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem 1rem;
+}
+
+.tag__facts dt {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.56rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--slate);
+  margin-bottom: 0.18rem;
+}
+
+.tag__facts dd {
+  margin: 0;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
+
+/* The digest is the anchor: a document's identity, readable in full. */
+.digest {
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--rule);
+}
+
+.digest__label {
+  display: block;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.56rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--slate);
+  margin-bottom: 0.4rem;
+}
+
+.digest__value {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.28rem 0.5rem;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--stamp);
+  font-variant-ligatures: none;
+}
+
+.tag__remove {
+  align-self: flex-start;
+  margin-top: auto;
+  border: 1.5px solid var(--rule);
+  background: transparent;
+  color: var(--slate);
+}
+.tag__remove:hover { border-color: var(--flagged); color: var(--flagged); }
+
+/* --------------------------------------------------------- states ------ */
+
+.waiting,
+.notice {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.82rem;
+}
+
+.waiting { color: var(--slate); letter-spacing: 0.08em; }
+
+.notice {
+  margin-top: var(--gap);
+  padding: 0.9rem 1.1rem;
+  background: #fdf1ef;
+  border-left: 4px solid var(--flagged);
+  color: var(--flagged);
+  overflow-wrap: anywhere;
+}
+
+.fault {
+  max-width: 34rem;
+  padding: 2rem;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-left: 4px solid var(--flagged);
+}
+
+.fault__title {
+  margin: 0 0 0.6rem;
+  font-size: 1.5rem;
+  letter-spacing: -0.03em;
+}
+
+.fault__detail {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.8rem;
+  color: var(--flagged);
+  overflow-wrap: anywhere;
+}
+
+.fault__checks {
+  margin: 1.25rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.88rem;
+  color: var(--slate);
+  line-height: 1.8;
+}
+
+.fault__checks code {
+  font-size: 0.78rem;
+  background: var(--paper);
+  padding: 0.1rem 0.35rem;
+  border-radius: 2px;
+}
+
+:focus-visible {
+  outline: 2px solid var(--stamp);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

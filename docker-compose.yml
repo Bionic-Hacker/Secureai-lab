@@ -42,7 +42,7 @@ services:
   redis:
     image: redis:7-alpine
     <<: *hardening
-    cap_add: [SETGID, SETUID]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
     command: ["redis-server", "--save", "", "--appendonly", "no"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -52,19 +52,20 @@ services:
     networks: [backend_net]
 
   clamav:
-    image: clamav/clamav:1.5_base
+    image: clamav/clamav:1.5
     <<: *hardening
-    cap_add: [CHOWN, SETGID, SETUID]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+    environment:
+      FRESHCLAM_CHECKS: "0"
     volumes:
       - clamav_db:/var/lib/clamav
     healthcheck:
       test: ["CMD-SHELL", "clamdscan --ping 1 || exit 1"]
       interval: 30s
       timeout: 10s
-      # Definition download on first boot is slow - give it room.
       start_period: 300s
       retries: 5
-    networks: [backend_net]
+    networks: [backend_net, frontend_net]
 
   vector-db:
     image: chromadb/chroma:0.5.5
