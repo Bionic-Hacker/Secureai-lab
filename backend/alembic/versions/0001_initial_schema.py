@@ -31,6 +31,7 @@ def upgrade() -> None:
         "developer",
         "viewer",
         name="user_role",
+        create_type=False,
     )
     user_role.create(op.get_bind(), checkfirst=True)
 
