@@ -1,0 +1,30 @@
+﻿# Absence of this file is why __pycache__/ and stale .pyc files were committed.
+# To clear what is already tracked:
+#   git rm -r --cached '**/__pycache__'
+__pycache__/
+*.py[cod]
+*.so
+.Python
+.venv/
+venv/
+env/
+
+# Secrets - never commit. .env.example is the only committed env file.
+.env
+.env.*
+!.env.example
+.env.backup-*
+
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+dist/
+build/
+
+node_modules/
+.vite/
+
+.DS_Store
+.idea/
+.vscode/
