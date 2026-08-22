@@ -46,11 +46,7 @@ class Settings(BaseSettings):
 
     # --- Rate limiting ---
     rate_limit_per_minute: int = 60
-    # Must stay above account_lockout_threshold: a genuinely-locked-out
-    # account should get 423 (locked), not 429 (rate limited) — if this
-    # limit is <= the lockout threshold, the IP-level limiter trips first
-    # on the very request that was supposed to reveal the lockout.
-    login_rate_limit_per_minute: int = 10
+    login_rate_limit_per_minute: int = 5
     upload_rate_limit_per_minute: int = 20
     redis_url: str = "redis://redis:6379/0"
 
@@ -61,13 +57,25 @@ class Settings(BaseSettings):
     ai_provider: Literal["openai", "local"] = "openai"
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"
+    # Embeddings use a dedicated setting, separate from the chat model above —
+    # OpenAI's embedding models (text-embedding-3-*) are a different API
+    # surface with their own pricing/dimensionality, not interchangeable
+    # with a chat-completion model even from the same provider.
+    openai_embedding_model: str = "text-embedding-3-small"
+    embedding_dimensions: int = 1536
     local_llm_base_url: str = "http://local-llm:8080/v1"
     local_llm_model: str = "llama-3.1-8b-instruct"
 
     # --- Vector DB ---
     chroma_host: str = "vector-db"
-    chroma_port: int = 8001
+    chroma_port: int = 8000
     chroma_auth_token: str = ""
+    chroma_collection_name: str = "document_chunks"
+
+    # --- RAG ingestion/retrieval ---
+    rag_chunk_size_tokens: int = 500
+    rag_chunk_overlap_tokens: int = 50
+    rag_retrieval_top_k: int = 5
 
     # --- Uploads ---
     max_upload_size_mb: int = 25

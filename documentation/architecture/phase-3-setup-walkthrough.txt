@@ -1,0 +1,105 @@
+================================================================================
+SecureAI Lab — Phase 3 Setup Walkthrough (RAG Ingestion)
+================================================================================
+What's new: text extraction (PDF/DOCX/TXT/source), chunking, OpenAI
+embeddings, and permission-scoped storage/retrieval in ChromaDB — the
+vector-db container you already have running and fixed.
+
+No new Docker containers needed for this phase. No new Postgres migration
+either — ingestion_status already existed on the documents table since
+Phase 2.
+
+--------------------------------------------------------------------------------
+STEP 1 — Merge the new files in (same pattern as Phase 2)
+--------------------------------------------------------------------------------
+    $ mkdir -p ~/phase3-staging
+    $ tar -xzf ~/Downloads/secureai-lab-phase3.tar.gz -C ~/phase3-staging
+    $ cd ~/phase3-staging/secureai-lab
+    $ cp -r . $REAL/
+
+Same safety note as before: your real backend/.env is never part of this
+archive (gitignored, never included), so this copy cannot touch it.
+
+--------------------------------------------------------------------------------
+STEP 2 — Add a real OpenAI API key to your .env
+--------------------------------------------------------------------------------
+    $ grep "^OPENAI_API_KEY=" $REAL/.env
+
+If that still shows the placeholder (sk-replace-me or empty), get a real
+key from https://platform.openai.com/api-keys and set it:
+
+    $ sed -i "s|^OPENAI_API_KEY=.*|OPENAI_API_KEY=sk-your-real-key-here|" $REAL/.env
+
+Without this, ingestion will fail closed with a clear "OPENAI_API_KEY is
+not set" error in the backend logs — not a silent skip.
+
+--------------------------------------------------------------------------------
+STEP 3 — Rebuild (new Python packages: openai, tiktoken, pypdf, python-docx)
+--------------------------------------------------------------------------------
+    $ cd $REAL
+    $ docker compose up --build -d backend
+    $ docker compose ps backend
+
+Should come up healthy, same as always.
+
+--------------------------------------------------------------------------------
+STEP 4 — Upload a document and watch it get ingested
+--------------------------------------------------------------------------------
+Re-use your login pattern from before:
+
+    $ set TOKEN (curl -s -X POST http://localhost:8080/api/v1/auth/login -H "Content-Type: application/json" -d '{"email":"YOUR_EMAIL","password":"YOUR_PASSWORD"}' | grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
+
+Upload something with real text content in it (not a blank file) — a
+README, a short PDF, whatever's handy:
+
+    $ curl -s -X POST http://localhost:8080/api/v1/documents -H "Authorization: Bearer $TOKEN" -F "file=@/path/to/something.txt;type=text/plain"
+
+Note the "id" field in the response, then poll it — ingestion runs in the
+background, so ingestion_status starts "pending" and moves to "indexed"
+(or "failed") within a few seconds:
+
+    $ set DOC_ID "paste-the-id-here"
+    $ curl -s http://localhost:8080/api/v1/documents/$DOC_ID -H "Authorization: Bearer $TOKEN"
+
+Watch for "ingestion_status":"indexed". If you see "failed" instead,
+check the logs:
+
+    $ docker compose logs backend --tail 50
+
+--------------------------------------------------------------------------------
+STEP 5 — Query it
+--------------------------------------------------------------------------------
+    $ curl -s -X POST http://localhost:8080/api/v1/rag/query -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"query":"whatever topic your test document actually covers"}'
+
+A successful response returns the most relevant chunks from documents you
+have access to, each with a similarity score. Try a query about something
+NOT in the document — you should still get results (nearest matches
+regardless of relevance is how vector search works), just with lower
+similarity scores. There's no relevance threshold filtering low-quality
+matches yet — that's a reasonable Phase 4 addition once there's an actual
+chat interface deciding what's "good enough" to cite.
+
+--------------------------------------------------------------------------------
+STEP 6 — Prove the permission isolation actually works
+--------------------------------------------------------------------------------
+This is the one worth actually testing, not just trusting the code:
+
+    1. Register a second account, log in as them
+    2. Query /api/v1/rag/query with a term you know is in the FIRST
+       user's uploaded document
+    3. Confirm the second user's results are empty (or only surface their
+       OWN documents, if they've uploaded any) — never the first user's
+       content, even though it's sitting right there in the same Chroma
+       collection
+
+If a second user's query ever surfaces the first user's chunks, that's a
+serious bug — stop and flag it rather than continuing to Phase 4.
+
+--------------------------------------------------------------------------------
+DONE WHEN...
+--------------------------------------------------------------------------------
+  [ ] Upload -> ingestion_status reaches "indexed" within a few seconds
+  [ ] /api/v1/rag/query returns real, relevant chunks for your test doc
+  [ ] A second user's query never surfaces the first user's content
+  [ ] docker compose logs backend shows no ingestion errors
+================================================================================

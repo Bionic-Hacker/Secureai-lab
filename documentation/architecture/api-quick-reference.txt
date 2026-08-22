@@ -1,0 +1,101 @@
+================================================================================
+SecureAI Lab — Backend API Quick Reference
+================================================================================
+Assumes your Docker stack is already up (docker compose ps shows everything
+Up/healthy). All requests go through nginx on port 8080 — the backend
+container itself isn't published to your host directly, by design.
+
+--------------------------------------------------------------------------------
+0 — Check the stack is actually up first
+--------------------------------------------------------------------------------
+    $ cd "$REAL"
+    $ docker compose ps
+
+If REAL isn't set (new terminal), re-set it:
+    $ REAL=/home/derrick/Desktop/aisp1/secureai-lab1
+
+--------------------------------------------------------------------------------
+1 — Log in and capture your access token
+--------------------------------------------------------------------------------
+    $ TOKEN=$(curl -s -X POST http://localhost:8080/api/v1/auth/login \
+        -H "Content-Type: application/json" \
+        -d '{"email":"you@example.com","password":"YourPasswordHere"}' \
+        | grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
+
+    $ echo $TOKEN
+
+`echo $TOKEN` should print a long string starting with "eyJ" (that's a JWT —
+all JWTs start that way, it's just base64 for the standard header). If it
+prints nothing, the login failed — run the same curl WITHOUT the
+`grep`/`cut` piped onto the end to see the raw error response instead:
+
+    $ curl -s -X POST http://localhost:8080/api/v1/auth/login \
+        -H "Content-Type: application/json" \
+        -d '{"email":"you@example.com","password":"YourPasswordHere"}'
+
+*** IMPORTANT: two separate expiry issues to know about ***
+  - $TOKEN, like $REAL, only lives in this terminal session — closing the
+    terminal loses it, just re-run step 1 in a new one.
+  - The access token itself also expires after 15 minutes REGARDLESS of
+    whether your terminal is still open (ACCESS_TOKEN_EXPIRE_MINUTES in
+    your .env). If a request starts returning 401 after a while, that's
+    why — just re-run step 1 to get a fresh one.
+
+--------------------------------------------------------------------------------
+2 — Confirm you're authenticated
+--------------------------------------------------------------------------------
+    $ curl -s http://localhost:8080/api/v1/auth/me \
+        -H "Authorization: Bearer $TOKEN"
+
+Should echo back your user record (email, role, mfa_enabled, etc).
+
+--------------------------------------------------------------------------------
+3 — Upload a document
+--------------------------------------------------------------------------------
+    $ curl -s -X POST http://localhost:8080/api/v1/documents \
+        -H "Authorization: Bearer $TOKEN" \
+        -F "file=@/path/to/some/file.txt;type=text/plain"
+
+Success returns JSON with "malware_scan_status":"clean". The `-F` flag
+builds a multipart/form-data upload (different from the -d/JSON pattern
+used above) — that's the format file uploads need, not raw JSON.
+
+--------------------------------------------------------------------------------
+4 — List your documents
+--------------------------------------------------------------------------------
+    $ curl -s http://localhost:8080/api/v1/documents \
+        -H "Authorization: Bearer $TOKEN"
+
+--------------------------------------------------------------------------------
+5 — Download a document back
+--------------------------------------------------------------------------------
+Grab a document's "id" from step 4's output, then:
+
+    $ curl -s http://localhost:8080/api/v1/documents/PASTE_ID_HERE/content \
+        -H "Authorization: Bearer $TOKEN" \
+        -o downloaded-file.txt
+
+`-o downloaded-file.txt` saves the response body to a file instead of
+printing it to your terminal (appropriate here since the response is the
+actual decrypted file content, not JSON).
+
+--------------------------------------------------------------------------------
+6 — Making JSON easier to read
+--------------------------------------------------------------------------------
+Raw curl output is one unformatted line. Pipe through `jq` (install with
+`sudo apt install jq` if you don't have it) to pretty-print:
+
+    $ curl -s http://localhost:8080/api/v1/documents -H "Authorization: Bearer $TOKEN" | jq
+
+--------------------------------------------------------------------------------
+7 — Log out (revoke your refresh token)
+--------------------------------------------------------------------------------
+You'd need your refresh_token from step 1's full login response (not
+captured above since we only grabbed access_token) — if you want this,
+rerun step 1's raw version, grab both fields, then:
+
+    $ curl -s -X POST http://localhost:8080/api/v1/auth/logout \
+        -H "Authorization: Bearer $TOKEN" \
+        -H "Content-Type: application/json" \
+        -d "{\"refresh_token\":\"PASTE_REFRESH_TOKEN_HERE\"}"
+================================================================================

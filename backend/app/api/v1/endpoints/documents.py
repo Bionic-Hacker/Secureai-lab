@@ -1,6 +1,7 @@
+import logging
 import uuid
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, UploadFile, status
 from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,7 +10,7 @@ from app.core.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.document import DocumentOut, ShareRequest
-from app.services import document_service
+from app.services import document_service, ingestion_service, vector_store
 from app.services.audit_service import record as audit_record
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -24,6 +25,7 @@ def _client_meta(request: Request) -> tuple[str, str]:
 @router.post("", response_model=DocumentOut, status_code=status.HTTP_201_CREATED)
 async def upload(
     request: Request,
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
@@ -47,6 +49,13 @@ async def upload(
         metadata={"filename": doc.original_filename, "size_bytes": doc.size_bytes},
     )
     await db.commit()
+
+    # Ingestion runs after the response is sent — the caller gets their
+    # upload confirmation immediately; ingestion_status starts 'pending'
+    # and moves to 'indexed'/'failed' asynchronously. Poll GET /documents/{id}
+    # to watch it progress.
+    background_tasks.add_task(ingestion_service.ingest_document, doc.id)
+
     return doc
 
 
@@ -175,6 +184,17 @@ async def delete(
         await document_service.delete_document(db, document_id, user)
     except document_service.DocumentError as e:
         raise HTTPException(e.status_code, e.message)
+
+    try:
+        vector_store.delete_document_chunks(document_id)
+    except Exception:
+        # The Postgres row and encrypted blob are already gone at this
+        # point — a transient Chroma error here shouldn't resurrect a
+        # deleted document or block the delete response. Logged for
+        # follow-up cleanup rather than silently ignored.
+        logging.getLogger("secureai.ingestion").exception(
+            "Failed to delete vector chunks for document_id=%s", document_id
+        )
 
     await audit_record(
         db, event_type="document_deleted", event_category="upload",

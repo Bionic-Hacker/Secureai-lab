@@ -1,0 +1,137 @@
+================================================================================
+SecureAI Lab — VS Code Setup & Workflow (Linux)
+================================================================================
+This covers getting VS Code properly wired to this project so you can run,
+debug, and test the Python code directly in the editor instead of only
+through the terminal.
+
+--------------------------------------------------------------------------------
+PART 1 — One-time setup
+--------------------------------------------------------------------------------
+
+1. Open the project folder itself (not a parent folder, not the backend/
+   subfolder alone) in VS Code:
+
+    $ code "$REAL"
+
+   `code` is VS Code's own command-line launcher. If that command isn't
+   found, open VS Code normally and use File > Open Folder instead — but
+   installing the `code` launcher is worth doing once: in VS Code, press
+   Ctrl+Shift+P (opens the Command Palette — the central way to run any
+   VS Code action by name instead of hunting through menus), type "Shell
+   Command," and select "Shell Command: Install 'code' command in PATH."
+
+2. Install the Python extension (publisher: Microsoft). Ctrl+Shift+X opens
+   the Extensions view; search "Python," click Install on the one
+   published by Microsoft (has a blue checkmark).
+
+3. Create the virtual environment, if you haven't already from the Phase 2
+   walkthrough:
+
+    $ cd "$REAL/backend"
+    $ python3 -m venv .venv
+    $ source .venv/bin/activate
+    $ pip install -r requirements-dev.txt
+
+4. Point VS Code at that virtual environment: Ctrl+Shift+P → type "Python:
+   Select Interpreter" → choose the one showing a path ending in
+   `backend/.venv/bin/python`. If it's not in the list, choose "Enter
+   interpreter path..." and paste that path directly.
+
+   You'll know this worked because the Python version shown in VS Code's
+   bottom status bar (bottom-left area) will change to reflect the venv.
+
+--------------------------------------------------------------------------------
+PART 2 — Running a Python file directly
+--------------------------------------------------------------------------------
+Most of what you have (main.py, the service modules, etc.) are NOT meant
+to be run directly — they're imported by other code, not scripts with
+their own entry point. Trying to "Run" app/main.py directly in VS Code
+will do nothing useful; FastAPI apps are started by an ASGI server
+(uvicorn), not by executing the file.
+
+To actually run the backend from VS Code instead of `docker compose`:
+  - Open the integrated terminal: Ctrl+` (the backtick key, top-left of
+    most US keyboards, same key as ~)
+  - This terminal runs on your host, not inside Docker, so make sure your
+    venv is active (source .venv/bin/activate) and you have a way to reach
+    Postgres/Redis/ClamAV — either point your local .env at your running
+    docker-compose services' published ports, or just keep using Docker
+    Compose for actually running the app and use VS Code purely for
+    editing + testing (see Part 3) — this is the simpler, recommended
+    split, since re-plumbing every dependency to run outside Docker adds
+    real complexity for no real benefit at this stage.
+
+--------------------------------------------------------------------------------
+PART 3 — Running and debugging tests (this is where VS Code actually helps)
+--------------------------------------------------------------------------------
+This is the part worth setting up properly — VS Code's test integration
+lets you run individual tests and set breakpoints, which plain `pytest`
+in a terminal can't do.
+
+1. Make sure your throwaway test Postgres/Redis are running (from the
+   earlier walkthrough):
+
+    $ docker run --rm -d --name secureai-test-db -p 5433:5432 \
+        -e POSTGRES_PASSWORD=test -e POSTGRES_DB=secureai_lab_test postgres:16-alpine
+    $ docker run --rm -d --name secureai-test-redis -p 6380:6379 redis:7-alpine
+
+2. Ctrl+Shift+P → "Python: Configure Tests" → select "pytest" → select the
+   `backend` folder as the root when prompted (not the repo root, not
+   `tests/` alone).
+
+3. A flask/beaker icon appears in the left sidebar (the Testing view).
+   Click it. VS Code discovers every test function across every
+   test_*.py file and shows them in a tree, organized by file and class —
+   exactly matching the structure in test_documents.py
+   (TestFileEncryption, TestFilenameSanitization, TestUpload,
+   TestPermissions).
+
+4. Hover over any test, class, or file in that tree and two icons appear:
+   - A play (▶) icon: runs just that test/group, shows pass/fail inline
+   - A bug (🐛) icon: runs it under the debugger
+
+5. To actually use the debugger: click in the gutter (the empty space
+   just left of the line numbers) next to a line inside a test — a red
+   dot appears, marking a breakpoint. Now click the bug icon on that test.
+   Execution will pause at that line, and you can:
+   - Hover over any variable to see its current value
+   - Use the Debug Console (appears at the bottom) to type expressions and
+     evaluate them against the paused state — e.g. type `data` to inspect
+     a variable, or `sanitize_filename("../evil.txt")` to call a function
+     live and see what it returns
+   - Use the step controls at the top of the screen (step over, step
+     into, step out, continue) to move through the code line by line
+
+   This is significantly faster than the print-statement-and-rerun cycle
+   for understanding why a specific test is failing.
+
+6. If a test fails, VS Code shows a red X in the tree and the Test
+   Results panel shows the assertion error and traceback — click it to
+   jump straight to the failing line.
+
+--------------------------------------------------------------------------------
+PART 4 — Editing with useful safety nets on
+--------------------------------------------------------------------------------
+Two settings worth turning on (Ctrl+, opens Settings, then use the search
+box at the top):
+
+  - Search "python linting" and enable it, or install the "Ruff" extension
+    (publisher: Astral Software) for fast, real-time linting matching what
+    the CI pipeline will eventually run (ruff is already in
+    requirements-dev.txt) — catches unused imports, obvious bugs, and
+    style issues as you type, underlined in the editor.
+
+  - Search "format on save" and enable "Editor: Format On Save" — pairs
+    well with Ruff's formatter to keep code consistently styled without
+    manual effort.
+
+--------------------------------------------------------------------------------
+QUICK REFERENCE — keyboard shortcuts used above
+--------------------------------------------------------------------------------
+  Ctrl+Shift+P    Command Palette — run any VS Code action by typing its name
+  Ctrl+Shift+X    Extensions view
+  Ctrl+`          Toggle the integrated terminal
+  Ctrl+,          Settings
+  (gutter click)  Toggle a breakpoint on that line
+================================================================================
