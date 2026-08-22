@@ -11,8 +11,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
+# --extra-index-url points pip at PyTorch's CPU-only wheel index IN ADDITION
+# to normal PyPI — torch resolves from there (a few hundred MB, no CUDA),
+# everything else resolves from PyPI as usual. Without this, sentence-
+# transformers' torch dependency pulls the ~2GB GPU build by default, which
+# this project has no use for (no GPU in this Docker setup) and would
+# roughly triple the image size for nothing.
 RUN pip install --no-cache-dir --upgrade pip \
-    && pip wheel --no-cache-dir --wheel-dir /build/wheels -r requirements.txt
+    && pip wheel --no-cache-dir --wheel-dir /build/wheels \
+       --extra-index-url https://download.pytorch.org/whl/cpu \
+       -r requirements.txt
 
 # ---- Runtime stage: minimal, non-root, no compilers ----
 FROM python:3.12-slim-bookworm AS runtime
@@ -40,7 +48,23 @@ COPY --chown=secureai:secureai alembic ./alembic
 # Upload/data directory owned by the app user, not world-writable
 RUN mkdir -p /data/uploads && chown -R secureai:secureai /data
 
+# HuggingFace/sentence-transformers cache directory — the secureai user has
+# no home directory (--no-create-home above), so HF_HOME must be set
+# explicitly or model downloads have nowhere sane to go.
+ENV HF_HOME=/app/.cache/huggingface
+RUN mkdir -p /app/.cache/huggingface && chown -R secureai:secureai /app/.cache
+
 USER secureai
+
+# Pre-download the local embedding model's weights at build time, so a
+# freshly-started container never needs internet access to fetch them and
+# the first real ingestion request isn't slowed down by a cold download.
+# This hardcodes the model name rather than reading LOCAL_EMBEDDING_MODEL
+# from .env (Docker build args would be needed for that) — if you change
+# that setting to a different model, update this line to match, or accept
+# a one-time runtime download as a fallback (local_provider.py handles
+# that gracefully either way).
+RUN python3 -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('BAAI/bge-small-en-v1.5')"
 
 EXPOSE 8000
 

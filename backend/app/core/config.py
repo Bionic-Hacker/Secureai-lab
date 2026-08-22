@@ -57,11 +57,15 @@ class Settings(BaseSettings):
     ai_provider: Literal["openai", "local"] = "openai"
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"
-    # Embeddings use a dedicated setting, separate from the chat model above —
-    # OpenAI's embedding models (text-embedding-3-*) are a different API
-    # surface with their own pricing/dimensionality, not interchangeable
-    # with a chat-completion model even from the same provider.
+    # Embeddings have their own provider switch, deliberately separate from
+    # ai_provider above (which will govern Phase 4's chat model). This lets
+    # you run local embeddings + OpenAI chat, or any other combination,
+    # without the two being coupled — exactly the setup recommended for
+    # this project: local embeddings for the privacy/no-external-call
+    # story, independent of whatever chat model Phase 4 ends up using.
+    embedding_provider: Literal["openai", "local"] = "local"
     openai_embedding_model: str = "text-embedding-3-small"
+    local_embedding_model: str = "BAAI/bge-small-en-v1.5"
     embedding_dimensions: int = 1536
     local_llm_base_url: str = "http://local-llm:8080/v1"
     local_llm_model: str = "llama-3.1-8b-instruct"
