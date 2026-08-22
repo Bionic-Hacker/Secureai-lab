@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     cors_allowed_origins: str = "http://localhost:5173"
 
     # --- AI ---
-    ai_provider: Literal["openai", "local"] = "openai"
+    ai_provider: Literal["openai", "local"] = "local"
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"
     # Embeddings have their own provider switch, deliberately separate from
@@ -67,8 +67,12 @@ class Settings(BaseSettings):
     openai_embedding_model: str = "text-embedding-3-small"
     local_embedding_model: str = "BAAI/bge-small-en-v1.5"
     embedding_dimensions: int = 1536
-    local_llm_base_url: str = "http://local-llm:8080/v1"
-    local_llm_model: str = "llama-3.1-8b-instruct"
+    local_llm_base_url: str = "http://ollama:11434/v1"
+    # llama3.2:3b, not the originally-referenced 8b model — meaningfully
+    # lighter for CPU-only inference (this stack has no GPU), while still
+    # producing coherent responses. Swappable via .env once you've
+    # confirmed your hardware handles it; see Phase 4 walkthrough.
+    local_llm_model: str = "llama3.2:3b"
 
     # --- Vector DB ---
     chroma_host: str = "vector-db"
@@ -80,6 +84,11 @@ class Settings(BaseSettings):
     rag_chunk_size_tokens: int = 500
     rag_chunk_overlap_tokens: int = 50
     rag_retrieval_top_k: int = 5
+
+    # --- AI Assistant (Phase 4) ---
+    assistant_max_history_messages: int = 10
+    assistant_max_response_tokens: int = 800
+    assistant_use_rag_context: bool = True
 
     # --- Uploads ---
     max_upload_size_mb: int = 25

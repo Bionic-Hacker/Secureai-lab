@@ -123,6 +123,17 @@ services:
     # Scrapes backend:8000/metrics over backend_net; never proxied by nginx.
     networks: [backend_net]
 
+
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - backend_net
+      - frontend_net
+    security_opt:
+      - no-new-privileges:true
 networks:
   # Internal: no route to the internet for the data-tier services. Bounds the
   # blast radius of a backend compromise (phase-1-architecture.md S2).
@@ -137,3 +148,4 @@ volumes:
   clamav_db:
   chroma_data:
   prom_data:
+  ollama_data:
