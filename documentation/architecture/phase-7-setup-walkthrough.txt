@@ -1,0 +1,163 @@
+================================================================================
+SecureAI Lab — Phase 7 Walkthrough (Security Testing & CI/CD)
+Garuda Linux / fish shell command reference
+================================================================================
+READ THIS FIRST — the verification model changes in this phase.
+
+Every phase so far has been verified locally: run a command, see real
+output, fix what's wrong, retry. GitHub Actions workflows CANNOT be
+tested that way — there is no local equivalent of "the real thing" to
+run. The only way to know if a workflow file is actually correct is to
+push it to GitHub and watch the Actions tab.
+
+This means the debugging loop for this phase is: push -> open
+https://github.com/Bionic-Hacker/Secureai-lab/actions -> read the actual
+failure -> fix -> push again. That's not a workaround, it's just what
+this phase's verification looks like. Every YAML file below has been
+validated for syntax and researched against each tool's CURRENT
+documented usage, but "syntactically valid" and "behaves exactly as
+intended on GitHub's runners" are two different guarantees — some
+iteration on the Actions tab should be expected, especially for the SBOM
+step specifically (flagged below).
+
+What Phase 7 adds:
+  - .github/workflows/security.yml — Semgrep (Phase 5's own bundled
+    ruleset, reused directly) + Bandit, Gitleaks secret detection,
+    pip-audit dependency vulnerability scanning, SBOM generation
+  - .github/workflows/container-scan.yml — builds the real backend image,
+    scans it with Trivy, fails on CRITICAL/HIGH with an available fix
+  - .github/workflows/tests.yml — the actual pytest suite, against real
+    Postgres/Redis service containers
+  - .github/workflows/dast.yml — spins up the real stack, runs an OWASP
+    ZAP baseline scan against it, report-only for now (see Step 5)
+
+--------------------------------------------------------------------------------
+STEP 1 — Stage and diff, same as every phase
+--------------------------------------------------------------------------------
+    mkdir -p ~/phase7-staging
+    tar -xzf ~/Downloads/secureai-lab-phase7.tar.gz -C ~/phase7-staging
+    diff -rq ~/phase7-staging/secureai-lab $REAL --exclude=.git --exclude=.env --exclude=__pycache__ --exclude=frontend --exclude=node_modules
+
+--------------------------------------------------------------------------------
+STEP 2 — Copy in the new workflow files
+--------------------------------------------------------------------------------
+    mkdir -p $REAL/.github/workflows
+    cp ~/phase7-staging/secureai-lab/.github/workflows/security.yml $REAL/.github/workflows/
+    cp ~/phase7-staging/secureai-lab/.github/workflows/container-scan.yml $REAL/.github/workflows/
+    cp ~/phase7-staging/secureai-lab/.github/workflows/tests.yml $REAL/.github/workflows/
+    cp ~/phase7-staging/secureai-lab/.github/workflows/dast.yml $REAL/.github/workflows/
+    cp ~/phase7-staging/secureai-lab/documentation/architecture/phase-7-setup-walkthrough.txt $REAL/documentation/architecture/
+    cd $REAL
+    git status --short
+
+Nothing else changes this phase — no application code, no
+docker-compose.yml, no requirements.txt. Just four new workflow files.
+
+--------------------------------------------------------------------------------
+STEP 3 — Validate YAML locally before pushing (catches typos, not logic)
+--------------------------------------------------------------------------------
+    python3 -c "
+import yaml
+for f in ['security.yml','container-scan.yml','tests.yml','dast.yml']:
+    with open('.github/workflows/' + f) as fh:
+        yaml.safe_load(fh)
+    print(f, 'OK')
+"
+
+This confirms the files PARSE correctly — it does not confirm the
+workflows will actually PASS once they run for real against your repo.
+That confirmation only comes from Step 4.
+
+--------------------------------------------------------------------------------
+STEP 4 — Commit and push, then watch the Actions tab
+--------------------------------------------------------------------------------
+    git add -A
+    git status --short
+    git commit -m "Phase 7: CI/CD security gates - Semgrep, Bandit, Gitleaks, Trivy, pip-audit, SBOM, pytest, OWASP ZAP baseline"
+    git push origin main
+
+Immediately after the push, go to:
+    https://github.com/Bionic-Hacker/Secureai-lab/actions
+
+You should see four separate workflow runs start automatically (Security
+Scans, Container Scan, Tests, DAST). Click into each one individually —
+don't just check the green/red summary, actually read what each job
+did. This is the real verification step for this entire phase.
+
+--------------------------------------------------------------------------------
+STEP 5 — What to expect from each workflow, and how to read a real failure
+--------------------------------------------------------------------------------
+SECURITY SCANS (sast / secrets-scan / dependency-audit / sbom):
+  - sast should find ZERO findings if your code hasn't changed since
+    Phase 5/6's own testing already confirmed the app code is clean by
+    these same rules — a red X here on backend/app itself would be a
+    genuine, real finding worth reading, not a fluke.
+  - secrets-scan scans your FULL git history, not just the current
+    files. If this fails, it found something real — possibly the
+    OpenAI key exposure from earlier in this project's history, still
+    sitting in a past commit even though the working tree is clean now.
+    A failure here is worth taking seriously, not dismissing.
+  - dependency-audit checks backend/requirements.txt against known CVE
+    databases. A failure here names a specific vulnerable package and
+    version — worth reading which one before deciding whether to
+    upgrade it or document it as an accepted risk.
+  - sbom is the one step flagged earlier as lower-confidence in its
+    exact command syntax. If this specific job fails while the other
+    three pass, that's expected as a possibility — check the actual
+    error text; a "command not found" or argument error there is a
+    syntax mismatch to fix, not a real security finding.
+
+CONTAINER SCAN:
+  This one takes longer (builds the real backend image, including the
+  same slow PyTorch/Semgrep dependency layer from Phases 3 and 5). A
+  failure here names specific CVEs in specific OS packages inside the
+  image — genuinely worth reading, since these are real, exploitable
+  vulnerabilities in your actual deployed container, not test noise.
+
+TESTS:
+  Runs whatever test_*.py files exist under backend/tests/ against real
+  Postgres and Redis containers spun up just for this job. If this
+  fails, note whether it's a real test failure (your code has a bug) or
+  an environment issue (a fixture couldn't reach the database) — the
+  failure text usually makes this distinction clear on inspection.
+
+DAST:
+  The slowest workflow — it builds and starts nearly the whole stack
+  (Postgres, Redis, ClamAV, ChromaDB, nginx, backend; Ollama is
+  deliberately skipped to save time). This one is configured
+  report-only (fail_action: false) — it will NOT fail the build even if
+  ZAP finds things. Download the "zap-report" artifact from the run and
+  actually read it once. Real, low-noise findings are worth fixing;
+  low-confidence passive-scan noise (a missing header on a 404 page, for
+  instance) is worth adding to a suppression rules file rather than
+  either ignoring the report entirely or blocking every future push on it.
+
+--------------------------------------------------------------------------------
+STEP 6 — Branch protection (a repo setting, not a file — do this manually)
+--------------------------------------------------------------------------------
+This can't be scripted from here without broader repo-admin API access,
+and is worth doing deliberately anyway:
+
+  1. On GitHub: Settings -> Branches -> Add branch protection rule
+  2. Branch name pattern: main
+  3. Enable "Require status checks to pass before merging"
+  4. Search for and select each of the four workflow job names (they
+     won't appear in that search box until each workflow has run at
+     least once — so do this AFTER Step 4, not before)
+  5. Consider also enabling "Require a pull request before merging" —
+     this is what actually makes the gates meaningful going forward:
+     without it, a direct push to main skips CI checks entirely, which
+     defeats the point of having fail-gates at all.
+
+--------------------------------------------------------------------------------
+DONE WHEN...
+--------------------------------------------------------------------------------
+  [ ] All four workflow files pushed and visible under the Actions tab
+  [ ] Security Scans: sast and secrets-scan both genuinely reviewed
+      (not just glanced at), sbom's real command syntax confirmed
+  [ ] Container Scan: Trivy result reviewed — any CRITICAL/HIGH finding
+      with a fix either resolved or explicitly, consciously accepted
+  [ ] Tests: pytest suite passes against real service containers
+  [ ] DAST: zap-report artifact downloaded and actually read at least once
+  [ ] Branch protection configured on main, requiring these checks
+================================================================================

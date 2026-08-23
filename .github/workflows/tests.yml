@@ -1,0 +1,61 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    name: Backend Test Suite
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: secureai_lab_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install system dependency for python-magic
+        run: sudo apt-get update && sudo apt-get install -y libmagic1
+
+      - name: Install Python dependencies
+        run: |
+          cd backend
+          pip install --break-system-packages -r requirements-dev.txt
+
+      - name: Run test suite
+        env:
+          DATABASE_URL: postgresql+asyncpg://postgres:test@localhost:5432/secureai_lab_test
+          REDIS_URL: redis://localhost:6379/0
+        run: |
+          cd backend
+          pytest -v

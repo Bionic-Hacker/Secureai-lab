@@ -1,0 +1,87 @@
+name: DAST
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  zap-baseline:
+    name: OWASP ZAP Baseline Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Generates a throwaway .env for this CI run only - values only need
+      # to pass the app's own format validators (real JWT hex length, a
+      # genuine Fernet key, real 64-char hex for AES-256-GCM), not be
+      # secret, since this entire environment is destroyed when the job
+      # ends. Never reuse anything generated here outside of CI.
+      - name: Generate a throwaway CI .env
+        run: |
+          cd $GITHUB_WORKSPACE
+          cp .env.example .env
+          MFA_KEY=$(python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" 2>/dev/null || pip install --break-system-packages cryptography --quiet && python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+          JWT_KEY=$(openssl rand -hex 64)
+          FIELD_KEY=$(openssl rand -hex 32)
+          PG_PASS=$(openssl rand -base64 24)
+          CHROMA_TOKEN=$(openssl rand -base64 24)
+          sed -i "s|^JWT_SECRET_KEY=.*|JWT_SECRET_KEY=$JWT_KEY|" .env
+          sed -i "s|^MFA_ENCRYPTION_KEY=.*|MFA_ENCRYPTION_KEY=$MFA_KEY|" .env
+          sed -i "s|^FIELD_ENCRYPTION_KEY=.*|FIELD_ENCRYPTION_KEY=$FIELD_KEY|" .env
+          sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$PG_PASS|" .env
+          sed -i "s|^CHROMA_AUTH_TOKEN=.*|CHROMA_AUTH_TOKEN=$CHROMA_TOKEN|" .env
+          sed -i "s|^DATABASE_URL=.*|DATABASE_URL=postgresql+asyncpg://secureai:$PG_PASS@postgres:5432/secureai_lab|" .env
+          sed -i "s|^CHROMA_PORT=.*|CHROMA_PORT=8000|" .env
+
+      # Ollama is deliberately excluded here - DAST targets the HTTP
+      # surface (headers, injection points, error handling), not AI
+      # response quality, and pulling a multi-GB model just to run a
+      # baseline scan would add significant CI time for no scan benefit.
+      - name: Start the stack (excluding ollama)
+        run: |
+          docker compose up -d --build postgres redis clamav vector-db nginx backend
+          echo "Waiting for backend health..."
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8080/healthz > /dev/null; then
+              echo "Backend healthy"
+              break
+            fi
+            sleep 5
+          done
+
+      - name: Run migrations
+        run: docker compose exec -T backend alembic upgrade head
+
+      # Report-only for now, deliberately: ZAP's passive baseline scan has
+      # a real false-positive rate (missing headers on 404 pages, cookie
+      # flags on non-sensitive routes) that's higher than the SAST/secrets
+      # gates above, which are near-zero-noise by comparison. Blocking on
+      # unreviewed DAST output risks teaching the team to ignore failures
+      # rather than fixing them. The honest path: run it on every push,
+      # actually triage what it finds, add a rules file (.zap/rules.tsv)
+      # suppressing confirmed-acceptable findings, and only then flip
+      # fail_action to true once the signal is trustworthy.
+      - name: ZAP Baseline Scan
+        uses: zaproxy/action-baseline@v0.12.0
+        with:
+          target: 'http://localhost:8080'
+          cmd_options: '-a'
+          fail_action: false
+
+      - name: Upload ZAP report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-report
+          path: report_html.html
+          retention-days: 30
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

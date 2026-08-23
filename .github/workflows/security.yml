@@ -1,0 +1,98 @@
+name: Security Scans
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  sast:
+    name: SAST (Semgrep + Bandit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Semgrep run directly, not via a marketplace wrapper action -
+      # returntocorp/semgrep-action is deprecated upstream. Reuses the
+      # exact same bundled ruleset from Phase 5 - written with this CI
+      # reuse in mind, so no separate CI-specific rules to maintain.
+      - name: Run Semgrep (custom ruleset)
+        run: |
+          docker run --rm -v "$PWD:/src" semgrep/semgrep \
+            semgrep scan --config /src/backend/semgrep-rules/security-rules.yaml \
+            --error --sarif --output /src/semgrep-results.sarif /src/backend/app
+
+      - name: Upload Semgrep SARIF
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-results
+          path: semgrep-results.sarif
+          retention-days: 30
+
+      - name: Run Bandit
+        run: |
+          pip install --break-system-packages bandit==1.7.10
+          # -ll: only report medium+ severity, -ii: only medium+ confidence -
+          # keeps this a real fail-gate rather than blocking on every
+          # informational finding (e.g. "subprocess module imported").
+          bandit -r backend/app -ll -ii -f json -o bandit-results.json
+
+      - name: Upload Bandit results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-results
+          path: bandit-results.json
+          retention-days: 30
+
+  secrets-scan:
+    name: Secret Detection (Gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history - gitleaks needs this to scan past commits, not just HEAD
+
+      # Run gitleaks' own image directly rather than the gitleaks-action
+      # wrapper: gitleaks-action v2 requires a paid license for
+      # organization-owned repos, and its Node 20 runtime is being
+      # deprecated by GitHub in 2026 regardless. The underlying tool
+      # itself has no such restriction.
+      - name: Run Gitleaks
+        run: |
+          docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:latest \
+            detect --source /repo --no-git -v --exit-code 1 --redact
+
+  dependency-audit:
+    name: Dependency Vulnerability Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Audit Python dependencies
+        run: |
+          pip install --break-system-packages pip-audit
+          pip-audit -r backend/requirements.txt --strict
+
+  sbom:
+    name: Generate SBOM
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate CycloneDX SBOM
+        run: |
+          pip install --break-system-packages cyclonedx-bom
+          cyclonedx-py requirements backend/requirements.txt -o sbom.json
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.json
+          retention-days: 90

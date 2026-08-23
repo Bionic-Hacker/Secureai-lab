@@ -1,0 +1,41 @@
+name: Container Scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  build-and-scan:
+    name: Build and Scan Backend Image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build backend image
+        run: docker build -t secureai-lab-backend:${{ github.sha }} ./backend
+
+      # Fails the build on CRITICAL/HIGH vulnerabilities with an available
+      # fix. ignore-unfixed avoids failing on CVEs with no patch yet
+      # available at all, which would otherwise be an unactionable gate.
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          image-ref: 'secureai-lab-backend:${{ github.sha }}'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy results to Security tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
