@@ -1,0 +1,171 @@
+================================================================================
+SecureAI Lab — Phase 6 Walkthrough (Threat Modeling Module)
+Garuda Linux / fish shell command reference
+================================================================================
+What Phase 6 adds:
+  - Structured threat models: a title + system description, containing
+    individually STRIDE-categorized threat entries
+  - AI-assisted generation using Phase 4's chat provider — feed it a
+    system description, get a draft STRIDE analysis back
+  - Defensive JSON parsing: if the local model's output can't be parsed
+    as structured data, nothing is silently dropped — a single
+    human-reviewable entry is created containing the raw output instead
+  - Full manual CRUD — every AI-generated entry can be edited or
+    overridden, and a threat model isn't "reviewed" until a human
+    explicitly marks it so
+  - A seed script populating a REAL threat model for this project's own
+    RAG cross-tenant isolation — the platform reviewing itself
+
+--------------------------------------------------------------------------------
+STEP 0 — Confirm clean starting state
+--------------------------------------------------------------------------------
+    set -Ux REAL /home/derrick/Secureai-lab   # only if a fresh terminal needs it
+    cd $REAL
+    git status --short
+
+Should be empty. Resolve or commit first if not.
+
+--------------------------------------------------------------------------------
+STEP 1 — Stage and diff
+--------------------------------------------------------------------------------
+    rm -rf ~/phase6-staging
+    mkdir -p ~/phase6-staging
+    tar -xzf ~/Downloads/secureai-lab-phase6.tar.gz -C ~/phase6-staging
+
+    diff -rq ~/phase6-staging/secureai-lab $REAL \
+      --exclude=.git --exclude=.env --exclude=.env.test --exclude=__pycache__ \
+      --exclude=frontend --exclude=node_modules
+
+Same review as every phase: ignore my unused scaffold clutter, never
+copy over docker-compose.yml/nginx.conf/security.py/user.py/
+document_service.py/requirements-dev.txt/conftest.py/.gitignore/README.md
+if they show as "differ" — those are yours. Skip alembic/env.py too, same
+reasoning as Phase 5 — not load-bearing for a manually-written migration.
+
+--------------------------------------------------------------------------------
+STEP 2 — Copy in the genuinely new/changed files
+--------------------------------------------------------------------------------
+    cd ~/phase6-staging/secureai-lab
+
+    cp backend/app/main.py $REAL/backend/app/main.py
+    cp backend/app/models/threat_model.py $REAL/backend/app/models/threat_model.py
+    cp backend/app/schemas/threat_model.py $REAL/backend/app/schemas/threat_model.py
+    cp backend/app/services/threat_model_service.py $REAL/backend/app/services/threat_model_service.py
+    cp backend/app/api/v1/endpoints/threat_models.py $REAL/backend/app/api/v1/endpoints/threat_models.py
+    cp backend/alembic/versions/0005_threat_models.py $REAL/backend/alembic/versions/0005_threat_models.py
+    mkdir -p $REAL/backend/app/scripts
+    cp backend/app/scripts/__init__.py $REAL/backend/app/scripts/__init__.py
+    cp backend/app/scripts/seed_threat_model.py $REAL/backend/app/scripts/seed_threat_model.py
+    cp documentation/architecture/phase-6-setup-walkthrough.txt $REAL/documentation/architecture/phase-6-setup-walkthrough.txt
+
+    cd $REAL
+    git status --short
+
+Confirm: main.py modified; everything else new. No requirements.txt or
+Dockerfile changes this phase — nothing new to install.
+
+--------------------------------------------------------------------------------
+STEP 3 — Rebuild (should be fast — no new dependencies)
+--------------------------------------------------------------------------------
+    cd $REAL
+    docker compose up --build -d backend > /tmp/build.log 2>&1
+    echo "BUILD_EXIT_CODE: $status"
+    tail -3 /tmp/build.log
+    sleep 10
+    docker compose ps backend
+    curl -s http://localhost:8080/healthz
+
+--------------------------------------------------------------------------------
+STEP 4 — Run the migration
+--------------------------------------------------------------------------------
+Check your actual current revision first — same check every time:
+    docker compose exec backend alembic current
+
+Compare against 0005_threat_models.py's `down_revision = "0004"`. If they
+match:
+    docker compose exec backend alembic upgrade head
+
+--------------------------------------------------------------------------------
+STEP 5 — Seed the real dogfooding threat model
+--------------------------------------------------------------------------------
+    docker compose exec backend python3 -m app.scripts.seed_threat_model bionichacker2@test.com
+
+Expect: "Seeded threat model <uuid> with 8 entries, attributed to
+bionichacker2@test.com."
+
+--------------------------------------------------------------------------------
+STEP 6 — Confirm it's retrievable and looks right
+--------------------------------------------------------------------------------
+    set TOKEN (curl -s -X POST http://localhost:8080/api/v1/auth/login \
+      -H "Content-Type: application/json" \
+      -d '{"email":"bionichacker2@test.com","password":"Florida2027!"}' \
+      | grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
+
+    curl -s http://localhost:8080/api/v1/threat-models -H "Authorization: Bearer $TOKEN"
+
+Should show one summary entry: "RAG Retrieval & Platform Request Path —
+Cross-Tenant Isolation", status "reviewed", entry_count 8. Note the
+"id" field, then fetch the full detail:
+
+    set TM_ID "paste-the-id-here"
+    curl -s http://localhost:8080/api/v1/threat-models/$TM_ID -H "Authorization: Bearer $TOKEN"
+
+--------------------------------------------------------------------------------
+STEP 7 — Test AI-assisted generation on a genuinely new threat model
+--------------------------------------------------------------------------------
+This is the real test of the local-model integration — expect it to take
+a while on first use if the model isn't already loaded in memory from an
+earlier assistant conversation:
+
+    curl -s -X POST http://localhost:8080/api/v1/threat-models \
+      -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+      -d '{"title":"Test: File Download Endpoint","system_description":"An API endpoint lets authenticated users download a file by ID. The file path is looked up from a database record and served from local disk.","generate_with_ai":true}'
+
+Expect a 201 with a populated "entries" array, "ai_generated":true on
+each one. If the local model's output couldn't be parsed as JSON,
+you'll instead see exactly one entry whose threat_description begins
+with "AI generation produced a response that couldn't be parsed..." —
+that's the defensive fallback working as designed, not a crash. Either
+way, note the returned "id".
+
+--------------------------------------------------------------------------------
+STEP 8 — Exercise the human-review workflow
+--------------------------------------------------------------------------------
+Edit one AI-generated entry manually (replace ENTRY_ID with one from the
+response above):
+
+    set ENTRY_ID "paste-an-entry-id-here"
+    curl -s -X PATCH http://localhost:8080/api/v1/threat-models/$TM_ID/entries/$ENTRY_ID \
+      -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+      -d '{"mitigation_status":"mitigated"}'
+
+Confirm "human_edited":true is now set. Then mark the whole model
+reviewed:
+
+    curl -s -X POST http://localhost:8080/api/v1/threat-models/$TM_ID/review \
+      -H "Authorization: Bearer $TOKEN"
+
+Confirm "status":"reviewed" and "reviewed_by" now shows your user ID.
+
+--------------------------------------------------------------------------------
+STEP 9 — Commit and push
+--------------------------------------------------------------------------------
+    cd $REAL
+    git status --short
+    git add -A
+    git status --short
+    git commit -m "Phase 6: Threat Modeling Module - STRIDE-categorized threat models, AI-assisted generation via Phase 4's chat provider, human review workflow, seeded with a real self-assessment of the project's own cross-tenant isolation"
+    git push origin main
+
+================================================================================
+DONE WHEN...
+================================================================================
+  [ ] backend healthy after rebuild
+  [ ] alembic current matched 0005's down_revision before running it
+  [ ] Seed script created a real 8-entry threat model
+  [ ] AI generation on a fresh threat model returns entries (or the
+      documented parse-failure fallback — either is a pass)
+  [ ] Manual entry edit sets human_edited:true
+  [ ] Review endpoint sets status:reviewed and reviewed_by correctly
+  [ ] Committed and pushed to GitHub
+================================================================================

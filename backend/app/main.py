@@ -12,6 +12,7 @@ from app.api.v1.endpoints import auth as auth_endpoints
 from app.api.v1.endpoints import code_review as code_review_endpoints
 from app.api.v1.endpoints import documents as documents_endpoints
 from app.api.v1.endpoints import rag as rag_endpoints
+from app.api.v1.endpoints import threat_models as threat_models_endpoints
 from app.core.config import get_settings
 from app.middleware.rate_limit import RateLimitMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
@@ -51,6 +52,7 @@ app.include_router(documents_endpoints.router, prefix=settings.api_v1_prefix)
 app.include_router(rag_endpoints.router, prefix=settings.api_v1_prefix)
 app.include_router(assistant_endpoints.router, prefix=settings.api_v1_prefix)
 app.include_router(code_review_endpoints.router, prefix=settings.api_v1_prefix)
+app.include_router(threat_models_endpoints.router, prefix=settings.api_v1_prefix)
 
 # /metrics is scraped by Prometheus over the internal backend_net network
 # only — nginx's location blocks never proxy it, so it's not reachable from
