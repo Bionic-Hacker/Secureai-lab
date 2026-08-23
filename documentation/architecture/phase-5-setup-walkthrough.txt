@@ -1,0 +1,196 @@
+================================================================================
+SecureAI Lab — Phase 5 Walkthrough (Secure Code Review Engine)
+Garuda Linux / fish shell command reference
+================================================================================
+What Phase 5 adds:
+  - Bandit (Python) + a custom Semgrep ruleset (Python/JS/TS) for SAST
+  - CVSS 3.1 scoring via a curated category mapping (not computed per-CVE —
+    see the walkthrough's note on why EPSS was deliberately dropped)
+  - Findings scoped to Phase 2's existing permission model — no new
+    upload path, this scans documents already uploaded
+  - Runs fully offline at scan time — the Semgrep ruleset is bundled into
+    the image at build time, no registry call needed at runtime
+
+--------------------------------------------------------------------------------
+STEP 0 — Confirm clean starting state
+--------------------------------------------------------------------------------
+    set -Ux REAL /home/derrick/Secureai-lab   # only if a fresh terminal needs it
+    cd $REAL
+    git status --short
+
+Should be empty. If not, resolve or commit that first.
+
+--------------------------------------------------------------------------------
+STEP 1 — Stage and diff (same discipline as every phase)
+--------------------------------------------------------------------------------
+    rm -rf ~/phase5-staging
+    mkdir -p ~/phase5-staging
+    tar -xzf ~/Downloads/secureai-lab-phase5.tar.gz -C ~/phase5-staging
+
+    diff -rq ~/phase5-staging/secureai-lab $REAL \
+      --exclude=.git --exclude=.env --exclude=.env.test --exclude=__pycache__ \
+      --exclude=frontend --exclude=node_modules
+
+Review exactly as before: ignore my unused scaffold folders, never copy
+over docker-compose.yml/security.py/user.py/document_service.py/
+requirements-dev.txt/conftest.py/.gitignore/README.md if they show as
+"differ" — those are yours. This time also pay attention to
+backend/app/models/document.py specifically — it SHOULD differ (I added
+a code_scan_status column to it), but check the diff content itself
+before copying, in case you've customized that file too.
+
+--------------------------------------------------------------------------------
+STEP 2 — Copy in the genuinely new/changed files
+--------------------------------------------------------------------------------
+    cd ~/phase5-staging/secureai-lab
+
+    cp backend/app/main.py $REAL/backend/app/main.py
+    cp backend/requirements.txt $REAL/backend/requirements.txt
+    cp .env.example $REAL/.env.example
+    cp backend/Dockerfile $REAL/backend/Dockerfile
+    cp backend/app/models/document.py $REAL/backend/app/models/document.py
+    cp backend/app/models/code_finding.py $REAL/backend/app/models/code_finding.py
+    cp backend/app/schemas/code_review.py $REAL/backend/app/schemas/code_review.py
+    cp backend/app/services/cvss_mapping.py $REAL/backend/app/services/cvss_mapping.py
+    cp backend/app/services/code_scan_service.py $REAL/backend/app/services/code_scan_service.py
+    cp backend/app/api/v1/endpoints/code_review.py $REAL/backend/app/api/v1/endpoints/code_review.py
+    cp backend/alembic/versions/0004_code_findings.py $REAL/backend/alembic/versions/0004_code_findings.py
+    cp -r backend/semgrep-rules $REAL/backend/
+    cp -r security-tests $REAL/  2>/dev/null || true   # just the README note, harmless
+
+    cd $REAL
+    git status --short
+
+Confirm this shows the expected modified/new list before continuing.
+
+--------------------------------------------------------------------------------
+STEP 3 — Rebuild (new deps: bandit, semgrep — expect a few extra minutes)
+--------------------------------------------------------------------------------
+    cd $REAL
+    docker compose up --build -d backend
+    sleep 12
+    docker compose ps backend
+    curl -s http://localhost:8080/healthz
+
+--------------------------------------------------------------------------------
+STEP 4 — Confirm Semgrep rules actually made it into the image
+--------------------------------------------------------------------------------
+    docker compose exec backend semgrep --config /app/semgrep-rules/security-rules.yaml --version
+
+If this errors saying the config file doesn't exist, the Dockerfile COPY
+step didn't take — check backend/Dockerfile has the
+"COPY --chown=secureai:secureai semgrep-rules ./semgrep-rules" line and
+rebuild.
+
+--------------------------------------------------------------------------------
+STEP 5 — Run the migration
+--------------------------------------------------------------------------------
+Check your actual current revision first, same as every migration so far:
+
+    docker compose exec backend alembic current
+
+Compare against 0004_code_findings.py's `down_revision = "0003"`. If they
+match, run it:
+
+    docker compose exec backend alembic upgrade head
+
+--------------------------------------------------------------------------------
+STEP 6 — Create a deliberately vulnerable test file
+--------------------------------------------------------------------------------
+This file has real, intentional issues across several categories so you
+can confirm the scanner actually catches something, not just that it
+runs without error:
+
+    printf '%s\n' \
+'import subprocess' \
+'import pickle' \
+'' \
+'def get_user(conn, username):' \
+'    query = f"SELECT * FROM users WHERE username = {username}"' \
+'    return conn.execute(query)' \
+'' \
+'def run_backup(target_dir):' \
+'    subprocess.call("tar -cf backup.tar " + target_dir, shell=True)' \
+'' \
+'def load_session(data):' \
+'    return pickle.loads(data)' \
+'' \
+'API_KEY = "sk-fake-example-key-for-testing-do-not-use"' \
+> /tmp/vulnerable_test.py
+
+    command cat /tmp/vulnerable_test.py
+
+--------------------------------------------------------------------------------
+STEP 7 — Upload it and trigger a scan
+--------------------------------------------------------------------------------
+    set TOKEN (curl -s -X POST http://localhost:8080/api/v1/auth/login \
+      -H "Content-Type: application/json" \
+      -d '{"email":"bionichacker2@test.com","password":"Florida2027!"}' \
+      | grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
+
+    curl -s -X POST http://localhost:8080/api/v1/documents \
+      -H "Authorization: Bearer $TOKEN" \
+      -F "file=@/tmp/vulnerable_test.py;type=text/plain"
+
+Note the "id" field, then trigger a scan on it:
+
+    set DOC_ID "paste-the-id-here"
+    curl -s -X POST http://localhost:8080/api/v1/code-review/scan/$DOC_ID \
+      -H "Authorization: Bearer $TOKEN"
+
+--------------------------------------------------------------------------------
+STEP 8 — Retrieve findings
+--------------------------------------------------------------------------------
+    sleep 5
+    curl -s http://localhost:8080/api/v1/code-review/findings/$DOC_ID \
+      -H "Authorization: Bearer $TOKEN"
+
+Expect "code_scan_status":"completed" and multiple findings — at minimum
+Bandit should flag the f-string SQL query, the shell=True subprocess
+call, and pickle.loads(); the summary object should show non-zero counts
+across critical/high severities. If it still says "scanning", wait a few
+more seconds and check again.
+
+--------------------------------------------------------------------------------
+STEP 9 — Confirm permission isolation still holds
+--------------------------------------------------------------------------------
+Code review reuses Phase 2's permission model entirely — worth a quick
+confirmation it actually carried over correctly:
+
+    curl -s -X POST http://localhost:8080/api/v1/auth/register \
+      -H "Content-Type: application/json" \
+      -d '{"email":"scan-test-user@test.com","display_name":"ScanTest","password":"AnotherStr0ng!Pass9"}'
+
+    set TOKEN2 (curl -s -X POST http://localhost:8080/api/v1/auth/login \
+      -H "Content-Type: application/json" \
+      -d '{"email":"scan-test-user@test.com","password":"AnotherStr0ng!Pass9"}' \
+      | grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
+
+    curl -s http://localhost:8080/api/v1/code-review/findings/$DOC_ID \
+      -H "Authorization: Bearer $TOKEN2"
+
+Expect a 404 — the second user has no access to the first user's
+document, so findings for it should be completely invisible, same as
+every other document-scoped endpoint in this project.
+
+--------------------------------------------------------------------------------
+STEP 10 — Commit and push
+--------------------------------------------------------------------------------
+    cd $REAL
+    git status --short
+    git add -A
+    git status --short
+    git commit -m "Phase 5: Secure Code Review Engine - Bandit + custom Semgrep rules, CVSS scoring, findings scoped to existing document permissions"
+    git push origin main
+
+================================================================================
+DONE WHEN...
+================================================================================
+  [ ] backend healthy after rebuild
+  [ ] Semgrep confirms the bundled ruleset loads (Step 4)
+  [ ] alembic current matched 0004's down_revision before running it
+  [ ] Scan on the test file returns real findings (SQLi, command
+      injection, insecure deserialization at minimum)
+  [ ] A second user gets 404 trying to view the first user's findings
+  [ ] Committed and pushed to GitHub
+================================================================================

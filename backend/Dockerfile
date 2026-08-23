@@ -44,6 +44,7 @@ RUN pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.t
 COPY --chown=secureai:secureai app ./app
 COPY --chown=secureai:secureai alembic.ini ./alembic.ini
 COPY --chown=secureai:secureai alembic ./alembic
+COPY --chown=secureai:secureai semgrep-rules ./semgrep-rules
 
 # Upload/data directory owned by the app user, not world-writable
 RUN mkdir -p /data/uploads && chown -R secureai:secureai /data

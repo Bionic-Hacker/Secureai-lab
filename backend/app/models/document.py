@@ -22,6 +22,7 @@ class Document(Base):
     storage_path: Mapped[str] = mapped_column(Text, nullable=False)
     malware_scan_status: Mapped[str] = mapped_column(String(16), default="pending", nullable=False)
     ingestion_status: Mapped[str] = mapped_column(String(16), default="pending", nullable=False)
+    code_scan_status: Mapped[str] = mapped_column(String(16), default="not_scanned", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
