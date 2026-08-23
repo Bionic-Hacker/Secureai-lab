@@ -24,7 +24,7 @@ jobs:
       # fix. ignore-unfixed avoids failing on CVEs with no patch yet
       # available at all, which would otherwise be an unactionable gate.
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1
         with:
           image-ref: 'secureai-lab-backend:${{ github.sha }}'
           format: 'sarif'
