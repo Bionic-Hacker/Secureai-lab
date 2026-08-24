@@ -30,10 +30,15 @@ rules:
       category: security
       owasp: "A03:2021 - Injection"
       cwe: "CWE-89"
-    patterns:
-      - pattern-either:
-          - pattern: $CONN.query(`...${$X}...`)
-          - pattern: $CONN.query("..." + $X)
+    # pattern-regex, not an AST pattern - deliberately. An AST pattern
+    # here failed semgrep-core's rule validation in CI (Phase 7), which
+    # silently drops the ENTIRE affected rule rather than just warning,
+    # so this and the three rules below were never actually running at
+    # all. Regex sidesteps language-parser validation entirely and was
+    # verified independently against real vulnerable/safe code samples
+    # before being used here - see the project's Phase 7 corrected
+    # walkthrough for the verification method.
+    pattern-regex: '\.query\(\s*`[^`]*\$\{|\.query\(\s*["\047][^"\047]*["\047]\s*\+'
 
   # ---------------------------------------------------------------------
   # Cross-Site Scripting — unescaped output into HTML
@@ -49,7 +54,13 @@ rules:
       category: security
       owasp: "A03:2021 - Injection"
       cwe: "CWE-79"
-    pattern: $EL.innerHTML = $X
+    # pattern-regex - see the note on sql-injection-js-template above for
+    # why. The whitespace check deliberately lives inside the negative
+    # lookahead (?!\s*[...]) rather than before it - putting \s* before
+    # the lookahead let backtracking "hide" an unconsumed space from the
+    # check during testing, causing a real false-positive on static
+    # string assignments. Verified against both cases before use.
+    pattern-regex: '\.innerHTML\s*=(?!\s*["\047`])'
 
   - id: xss-react-dangerously-set
     languages: [javascript, typescript]
@@ -62,7 +73,13 @@ rules:
       category: security
       owasp: "A03:2021 - Injection"
       cwe: "CWE-79"
-    pattern: "dangerouslySetInnerHTML={{__html: $X}}"
+    # This is the specific rule that originally failed AST pattern
+    # validation (Stdlib.Parsing.Parse_error on the JSX double-brace
+    # object syntax) - first discovered during Phase 5 manual testing,
+    # not fixed at the time since it didn't block anything in that
+    # informal context. It silently failed CI's stricter validation in
+    # Phase 7 instead. Regex avoids the JSX-parsing problem entirely.
+    pattern-regex: 'dangerouslySetInnerHTML\s*=\s*\{\{\s*__html\s*:'
 
   # ---------------------------------------------------------------------
   # Command Injection
@@ -93,7 +110,7 @@ rules:
       category: security
       owasp: "A03:2021 - Injection"
       cwe: "CWE-78"
-    pattern: child_process.exec($CMD, ...)
+    pattern-regex: 'child_process\.exec\('
 
   # ---------------------------------------------------------------------
   # Hardcoded Credentials
