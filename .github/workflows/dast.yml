@@ -26,7 +26,8 @@ jobs:
         run: |
           cd $GITHUB_WORKSPACE
           cp .env.example .env
-          MFA_KEY=$(python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" 2>/dev/null || pip install --break-system-packages cryptography --quiet && python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+          pip install --break-system-packages cryptography --quiet
+          MFA_KEY=$(python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
           JWT_KEY=$(openssl rand -hex 64)
           FIELD_KEY=$(openssl rand -hex 32)
           PG_PASS=$(openssl rand -base64 24)
