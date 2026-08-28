@@ -1,0 +1,28 @@
+# Deliberately accepted risks, each documented in detail (with technical
+# justification, not just a version-cant-upgrade excuse) in the commit
+# history and inline code comments. Each has an expiry date to force a
+# periodic re-review, not a silent, permanent suppression.
+
+# setuptools - fix requires >=83.0.0, which breaks Semgrep (pkg_resources
+# ModuleNotFoundError, confirmed via actual rebuild+test, not assumed).
+# CVE itself is macOS-only (APFS/HFS+ Unicode normalization bug in
+# MANIFEST.in exclusion handling during sdist publishing) - this project
+# runs Linux-only containers and never builds/publishes its own sdist.
+# See commit ed13009.
+CVE-2026-59890 exp:2027-02-28
+
+# chromadb - verified via direct code review (vector_store.py) that the
+# vulnerable code paths are never invoked: no embedding_function is ever
+# passed to ChromaDB (all embeddings computed by our own provider
+# abstraction), and ChromaDB is unreachable outside the internal Docker
+# network with only the backend holding credentials. See commit 8f49231.
+CVE-2026-45830 exp:2027-02-28
+CVE-2026-45831 exp:2027-02-28
+CVE-2026-45833 exp:2027-02-28
+
+# protobuf - three separate fix attempts (exact 6.x pin, exact 5.x pin,
+# ranged 5.x pin) all failed identically with pip resolution-too-deep.
+# protobuf sits at the intersection of chromadb and semgrep (via
+# opentelemetry) already-entangled dependency chains. Real fix tied to
+# the chromadb upgrade above. See commit ccab4a4.
+CVE-2025-4565 exp:2027-02-28
