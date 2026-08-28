@@ -6,23 +6,30 @@ sqlalchemy==2.0.35
 asyncpg==0.29.0
 alembic==1.13.2
 argon2-cffi==23.1.0
-pyjwt==2.9.0
+pyjwt==2.13.0
 pyotp==2.9.0
-cryptography==43.0.1
+cryptography==50.0.1
 redis==5.0.8
 prometheus-fastapi-instrumentator==7.0.0
 python-magic==0.4.27
 boto3==1.35.24
-python-multipart==0.0.9
+python-multipart==0.0.20
 email-validator==2.2.0
 httpx==0.27.2
 chromadb==0.5.5
 clamd==1.0.2
 openai==1.51.0
 tiktoken==0.8.0
-sentence-transformers==3.1.1
-pypdf==5.0.1
+sentence-transformers==5.2.1
+transformers>=5.5.0
+pypdf==6.15.0
 python-docx==1.1.2
 bandit==1.7.10
 semgrep==1.87.0
 setuptools<81
+# Explicit pin - without this, a pre-existing chromadb/semgrep opentelemetry
+# version tension sends the resolver backtracking into an old numpy
+# release with no prebuilt wheel, which then fails to build from source.
+# 1.26.4 is the version that has resolved cleanly in every successful
+# build so far.
+numpy==1.26.4
