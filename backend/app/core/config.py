@@ -46,7 +46,7 @@ class Settings(BaseSettings):
 
     # --- Rate limiting ---
     rate_limit_per_minute: int = 60
-    login_rate_limit_per_minute: int = 5
+    login_rate_limit_per_minute: int = 8
     upload_rate_limit_per_minute: int = 20
     redis_url: str = "redis://redis:6379/0"
 
