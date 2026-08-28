@@ -26,6 +26,17 @@ pypdf==6.15.0
 python-docx==1.1.2
 bandit==1.7.10
 semgrep==1.87.0
+# Pinned below 81, not below the CVE fix version (83.0.0) - deliberate,
+# tested trade-off, not an oversight. Semgrep own opentelemetry
+# dependency still hard-crashes on setuptools>=81 (pkg_resources removal)
+# as of this test - confirmed by actually upgrading and re-testing, not
+# assumed. The resulting CVE exposure (PYSEC-2026-3447 / CVE-2026-59890)
+# is accepted: it describes a macOS-only (APFS/HFS+) Unicode normalization
+# bug in MANIFEST.in exclusion handling when BUILDING/PUBLISHING a source
+# distribution. This project runs exclusively on Linux containers and
+# never builds or publishes its own sdist - setuptools here is used
+# purely as a build backend for installing other packages. The
+# vulnerability's entire attack surface does not exist in this deployment.
 setuptools<81
 # Explicit pin - without this, a pre-existing chromadb/semgrep opentelemetry
 # version tension sends the resolver backtracking into an old numpy
