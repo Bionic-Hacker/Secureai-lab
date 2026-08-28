@@ -59,6 +59,8 @@ jobs:
           JWT_SECRET_KEY: c822289d88deb6fe88e24f3e44586b8bf66c6b376351d349fa9c723fc0e2c99d27cf4c06ce3e91d4d03b7291a34e3b80badf0b45507bd4c27203957d9384429b
           MFA_ENCRYPTION_KEY: 9WuOKe83cnWnkMtY0oWNuVE-8lHIaa6cy5oWRW9Fghs=
           FIELD_ENCRYPTION_KEY: 21eb814fefa0e4a895d407aa578f69a8a38d7247ba02d59bf8e903950c2ec236
+          UPLOAD_STORAGE_PATH: /tmp/test-uploads
         run: |
+          mkdir -p /tmp/test-uploads
           cd backend
           pytest -v
