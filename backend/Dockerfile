@@ -38,6 +38,14 @@ WORKDIR /app
 
 COPY --from=builder /build/wheels /wheels
 COPY requirements.txt .
+# Runtime stage previously had no pip upgrade step at all - it silently
+# inherited whatever pip version happened to ship baked into the base
+# image, which Trivy flagged with 5 known CVEs (path traversal via
+# malicious entry point names, wheel extraction path traversal, symlink
+# extraction checks, import-timing arbitrary code execution). The
+# builder stage self-upgrades pip too, but that pip is discarded -
+# only the wheels it built get copied forward, not pip itself.
+RUN pip install --no-cache-dir --upgrade "pip>=26.2.1"
 RUN pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.txt \
     && rm -rf /wheels
 
