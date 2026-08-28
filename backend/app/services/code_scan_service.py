@@ -63,7 +63,7 @@ def _run_semgrep(file_path: Path) -> list[dict]:
     # Semgrep writes its own settings to $HOME/.semgrep on first run.
     # This container has no home directory and a read-only root
     # filesystem at runtime, so $HOME must point somewhere writable.
-    env = {**os.environ, "HOME": "/tmp"}
+    env = {**os.environ, "HOME": "/tmp"}  # nosec B108 - subprocess-only, single-tenant container, no sensitive data written; see comment above
 
     result = subprocess.run(
         ["semgrep", "scan", "--config", _SEMGREP_RULES_PATH, "--json", "--quiet", str(file_path)],
