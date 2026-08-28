@@ -14,6 +14,21 @@ Postgres doing it one way and the vector store doing it another.
 query_chunks() takes allowed_document_ids as a required, non-optional
 parameter specifically so it's structurally impossible to call this
 function without deciding what the caller is allowed to see first.
+
+Accepted risk, verified by code review, not just architecture
+argument: chromadb 0.5.5 carries CVE-2026-45830/45831/45833
+(authorization-bypass and RCE-via-embedding-function issues in
+ChromaDBs own server). None are reachable here. This module never
+passes an embedding_function to get_or_create_collection - every
+embedding is computed by this app own provider abstraction
+(services/embeddings/) and supplied pre-computed, so the vulnerable
+embedding-function-loading code path in ChromaDB is never invoked,
+for any input. Separately, ChromaDB itself is unreachable from
+outside backend_net (an internal-only Docker network), and only
+this backend service holds CHROMA_AUTH_TOKEN - end users never
+receive ChromaDB credentials directly, so the authorization-bypass
+CVEs (which require an authenticated ChromaDB caller) have no
+attacker-reachable entry point either.
 """
 import uuid
 
