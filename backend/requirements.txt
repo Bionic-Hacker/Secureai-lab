@@ -44,3 +44,20 @@ setuptools<81
 # 1.26.4 is the version that has resolved cleanly in every successful
 # build so far.
 numpy==1.26.4
+
+# protobuf CVE-2025-4565 (HIGH, DoS via recursion limit bypass in the
+# pure-Python backend) - deliberately UNPINNED, not overlooked. Fixed
+# in 5.29.6 or 6.33.5, per pip-audit. Three separate attempts to pin it
+# here all failed identically with pip resolution-too-deep:
+#   protobuf==6.31.1        (exact pin, 6.x line)
+#   protobuf==5.29.6        (exact pin, 5.x line)
+#   protobuf>=5.29.6,<6.0.0 (range, 5.x line)
+# All three converge on the same conclusion: this is not a version-
+# choice problem. protobuf sits at the intersection of chromadbs and
+# semgreps (via opentelemetry) already-entangled dependency chains, and
+# any explicit constraint reopens that tension past pips resolver depth
+# limit. The real fix likely requires resolving the chromadb/
+# opentelemetry version tension directly - plausibly as a side effect
+# of the chromadb upgrade already deferred separately for
+# CVE-2026-45830/45831/45833 (see vector_store.py) - not a standalone
+# requirements.txt fix.
