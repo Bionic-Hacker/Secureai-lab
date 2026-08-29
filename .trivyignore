@@ -26,3 +26,22 @@ CVE-2026-45833 exp:2027-02-28
 # opentelemetry) already-entangled dependency chains. Real fix tied to
 # the chromadb upgrade above. See commit ccab4a4.
 CVE-2025-4565 exp:2027-02-28
+
+# msgpack GHSA-6v7p-g79w-8964 - confirmed FALSE POSITIVE, not deferred risk.
+# msgpack is not installed anywhere in this image - verified twice via
+# pip show inside the running container (Package(s) not found), the
+# second time after a full --no-cache rebuild to rule out any local
+# cache discrepancy with what CI built. Trivys own scan log shows why:
+# WARN Third-party SBOM may lead to inaccurate vulnerability detection.
+# This scan used an embedded/third-party SBOM rather than inspecting
+# the image filesystem directly, and that SBOM is simply wrong here.
+GHSA-6v7p-g79w-8964 exp:2027-02-28
+
+# setuptools CVE-2025-47273 (Path Traversal in PackageIndex.download) -
+# confirmed FALSE POSITIVE, not deferred risk. Fixed in 78.1.1; this
+# project resolves to 80.10.2 (confirmed via pip show inside the
+# running container), comfortably above the fix version and well
+# within the separately-documented <81 cap. Same root cause as the
+# msgpack false positive above: Trivys own log shows this scan used a
+# third-party SBOM rather than the image filesystem directly.
+CVE-2025-47273 exp:2027-02-28
