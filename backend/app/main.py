@@ -4,6 +4,7 @@ from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.encoders import jsonable_encoder
 from prometheus_fastapi_instrumentator import Instrumentator
 from redis.asyncio import Redis
 
@@ -71,7 +72,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     # as-is since it only describes the client's own malformed input.
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        content={"detail": exc.errors()},
+        content={"detail": jsonable_encoder(exc.errors())},
     )
 
 
