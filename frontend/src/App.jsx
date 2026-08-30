@@ -1,9 +1,23 @@
-﻿import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { signIn, whoAmI, listDocuments, deleteDocument, uploadDocument } from "./api.js";
 import IntakeSlot from "./components/IntakeSlot.jsx";
 import CustodyTag from "./components/CustodyTag.jsx";
 
 const PENDING = new Set(["pending", "scanning", "in_progress"]);
+
+const FILTERS = [
+  { key: "all", label: "All" },
+  { key: "clean", label: "Cleared", tone: "clean" },
+  { key: "pending", label: "In scan", tone: "pending" },
+  { key: "flagged", label: "Flagged", tone: "flagged" },
+];
+
+function statusTone(status) {
+  if (status === "clean") return "clean";
+  if (PENDING.has(status)) return "pending";
+  if (status === "infected" || status === "error") return "flagged";
+  return "pending";
+}
 
 export default function App() {
   const [phase, setPhase] = useState("connecting");
@@ -11,6 +25,8 @@ export default function App() {
   const [docs, setDocs] = useState([]);
   const [fault, setFault] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [filter, setFilter] = useState("all");
+  const [sortBy, setSortBy] = useState("date_desc");
   const pollRef = useRef(null);
 
   const refresh = useCallback(async () => {
@@ -74,10 +90,39 @@ export default function App() {
     }
   }
 
+  // Filtering and sorting happen client-side over whatever the API already
+  // returned - no extra request, and it stays instant as the shelf grows.
+  const visibleDocs = useMemo(() => {
+    let items = docs;
+    if (filter !== "all") {
+      items = items.filter((d) => statusTone(d.malware_scan_status) === filter);
+    }
+    const sorted = [...items];
+    switch (sortBy) {
+      case "date_asc":
+        sorted.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+        break;
+      case "name_asc":
+        sorted.sort((a, b) =>
+          (a.original_filename ?? "").localeCompare(b.original_filename ?? "")
+        );
+        break;
+      case "status":
+        sorted.sort((a, b) =>
+          statusTone(a.malware_scan_status).localeCompare(statusTone(b.malware_scan_status))
+        );
+        break;
+      case "date_desc":
+      default:
+        sorted.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    }
+    return sorted;
+  }, [docs, filter, sortBy]);
+
   if (phase === "connecting") {
     return (
       <main className="bench bench--centered">
-        <p className="waiting">Opening the benchâ€¦</p>
+        <p className="waiting">Opening the bench…</p>
       </main>
     );
   }
@@ -139,13 +184,49 @@ export default function App() {
         </p>
       )}
 
+      {docs.length > 0 && (
+        <div className="toolbar">
+          <div className="toolbar__filters" role="group" aria-label="Filter by status">
+            {FILTERS.map((f) => (
+              <button
+                key={f.key}
+                type="button"
+                className={`filter-btn ${filter === f.key ? "filter-btn--active" : ""} ${
+                  filter === f.key && f.tone ? `filter-btn--${f.tone}` : ""
+                }`}
+                onClick={() => setFilter(f.key)}
+                aria-pressed={filter === f.key}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+          <div className="toolbar__sort">
+            <label htmlFor="sort-select">Sort</label>
+            <select
+              id="sort-select"
+              className="sort-select"
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+            >
+              <option value="date_desc">Newest logged</option>
+              <option value="date_asc">Oldest logged</option>
+              <option value="name_asc">Name (A–Z)</option>
+              <option value="status">Status</option>
+            </select>
+          </div>
+        </div>
+      )}
+
       <section className="shelf">
         {docs.length === 0 ? (
           <p className="shelf__empty">
             Nothing logged yet. Drop a .pdf, .docx or .txt above and it gets a tag.
           </p>
+        ) : visibleDocs.length === 0 ? (
+          <p className="shelf__empty">No documents match this filter.</p>
         ) : (
-          docs.map((doc) => (
+          visibleDocs.map((doc) => (
             <CustodyTag key={doc.id} doc={doc} onDelete={() => handleDelete(doc.id)} />
           ))
         )}
