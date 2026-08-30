@@ -32,4 +32,4 @@ node_modules/
 
 # Scratch directories used for staging tarball extractions during
 # chat-assisted development sessions - never meant to be tracked.
-*-staging/
+*staging*/
