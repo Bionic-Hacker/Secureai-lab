@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { signIn, whoAmI, listDocuments, deleteDocument, uploadDocument } from "./api.js";
 import IntakeSlot from "./components/IntakeSlot.jsx";
 import CustodyTag from "./components/CustodyTag.jsx";
+import Sidebar from "./components/Sidebar.jsx";
+import GovernanceView from "./components/governance/GovernanceView.jsx";
 
 const PENDING = new Set(["pending", "scanning", "in_progress"]);
 
@@ -27,6 +29,7 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState("all");
   const [sortBy, setSortBy] = useState("date_desc");
+  const [activeSection, setActiveSection] = useState("intake");
   const pollRef = useRef(null);
 
   const refresh = useCallback(async () => {
@@ -147,90 +150,103 @@ export default function App() {
   const waiting = docs.filter((d) => PENDING.has(d.malware_scan_status)).length;
 
   return (
-    <main className="bench">
-      <header className="masthead">
-        <div className="masthead__mark">
-          <span className="masthead__rule" aria-hidden="true" />
-          <h1 className="masthead__title">Intake</h1>
-        </div>
-        <dl className="ledger">
-          <div className="ledger__cell">
-            <dt>Held</dt>
-            <dd>{String(docs.length).padStart(3, "0")}</dd>
-          </div>
-          <div className="ledger__cell">
-            <dt>Cleared</dt>
-            <dd>{String(clean).padStart(3, "0")}</dd>
-          </div>
-          <div className="ledger__cell">
-            <dt>In scan</dt>
-            <dd>{String(waiting).padStart(3, "0")}</dd>
-          </div>
-          <div className="ledger__cell ledger__cell--wide">
-            <dt>Custodian</dt>
-            <dd className="ledger__who">
-              {user?.display_name}
-              <span className="ledger__role">{user?.role?.replace("_", " ")}</span>
-            </dd>
-          </div>
-        </dl>
-      </header>
+    <div className="shell">
+      <Sidebar activeSection={activeSection} onSelect={setActiveSection} />
+      <main className="main-area">
+        {activeSection === "intake" && (
+          <div className="bench">
+            <header className="masthead">
+              <div className="masthead__mark">
+                <span className="masthead__rule" aria-hidden="true" />
+                <h1 className="masthead__title">Intake</h1>
+              </div>
+              <dl className="ledger">
+                <div className="ledger__cell">
+                  <dt>Held</dt>
+                  <dd>{String(docs.length).padStart(3, "0")}</dd>
+                </div>
+                <div className="ledger__cell">
+                  <dt>Cleared</dt>
+                  <dd>{String(clean).padStart(3, "0")}</dd>
+                </div>
+                <div className="ledger__cell">
+                  <dt>In scan</dt>
+                  <dd>{String(waiting).padStart(3, "0")}</dd>
+                </div>
+                <div className="ledger__cell ledger__cell--wide">
+                  <dt>Custodian</dt>
+                  <dd className="ledger__who">
+                    {user?.display_name}
+                    <span className="ledger__role">{user?.role?.replace("_", " ")}</span>
+                  </dd>
+                </div>
+              </dl>
+            </header>
 
-      <IntakeSlot onFiles={handleFiles} busy={busy} />
+            <IntakeSlot onFiles={handleFiles} busy={busy} />
 
-      {fault && (
-        <p className="notice" role="alert">
-          {fault}
-        </p>
-      )}
+            {fault && (
+              <p className="notice" role="alert">
+                {fault}
+              </p>
+            )}
 
-      {docs.length > 0 && (
-        <div className="toolbar">
-          <div className="toolbar__filters" role="group" aria-label="Filter by status">
-            {FILTERS.map((f) => (
-              <button
-                key={f.key}
-                type="button"
-                className={`filter-btn ${filter === f.key ? "filter-btn--active" : ""} ${
-                  filter === f.key && f.tone ? `filter-btn--${f.tone}` : ""
-                }`}
-                onClick={() => setFilter(f.key)}
-                aria-pressed={filter === f.key}
-              >
-                {f.label}
-              </button>
-            ))}
+            {docs.length > 0 && (
+              <div className="toolbar">
+                <div className="toolbar__filters" role="group" aria-label="Filter by status">
+                  {FILTERS.map((f) => (
+                    <button
+                      key={f.key}
+                      type="button"
+                      className={`filter-btn ${filter === f.key ? "filter-btn--active" : ""} ${
+                        filter === f.key && f.tone ? `filter-btn--${f.tone}` : ""
+                      }`}
+                      onClick={() => setFilter(f.key)}
+                      aria-pressed={filter === f.key}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="toolbar__sort">
+                  <label htmlFor="sort-select">Sort</label>
+                  <select
+                    id="sort-select"
+                    className="sort-select"
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value)}
+                  >
+                    <option value="date_desc">Newest logged</option>
+                    <option value="date_asc">Oldest logged</option>
+                    <option value="name_asc">Name (A–Z)</option>
+                    <option value="status">Status</option>
+                  </select>
+                </div>
+              </div>
+            )}
+
+            <section className="shelf">
+              {docs.length === 0 ? (
+                <p className="shelf__empty">
+                  Nothing logged yet. Drop a .pdf, .docx or .txt above and it gets a tag.
+                </p>
+              ) : visibleDocs.length === 0 ? (
+                <p className="shelf__empty">No documents match this filter.</p>
+              ) : (
+                visibleDocs.map((doc) => (
+                  <CustodyTag key={doc.id} doc={doc} onDelete={() => handleDelete(doc.id)} />
+                ))
+              )}
+            </section>
           </div>
-          <div className="toolbar__sort">
-            <label htmlFor="sort-select">Sort</label>
-            <select
-              id="sort-select"
-              className="sort-select"
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-            >
-              <option value="date_desc">Newest logged</option>
-              <option value="date_asc">Oldest logged</option>
-              <option value="name_asc">Name (A–Z)</option>
-              <option value="status">Status</option>
-            </select>
-          </div>
-        </div>
-      )}
-
-      <section className="shelf">
-        {docs.length === 0 ? (
-          <p className="shelf__empty">
-            Nothing logged yet. Drop a .pdf, .docx or .txt above and it gets a tag.
-          </p>
-        ) : visibleDocs.length === 0 ? (
-          <p className="shelf__empty">No documents match this filter.</p>
-        ) : (
-          visibleDocs.map((doc) => (
-            <CustodyTag key={doc.id} doc={doc} onDelete={() => handleDelete(doc.id)} />
-          ))
         )}
-      </section>
-    </main>
+
+        {activeSection === "governance" && (
+          <div className="bench">
+            <GovernanceView />
+          </div>
+        )}
+      </main>
+    </div>
   );
 }

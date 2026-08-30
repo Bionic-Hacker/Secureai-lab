@@ -498,3 +498,554 @@ code, .mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ============================================================ shell ==== */
+/* New top-level layout: persistent sidebar + main content area. Only the
+   "ready" state uses this - connecting/faulted states stay centered with
+   no navigation, since there's nowhere meaningful to navigate to yet. */
+
+.shell {
+  display: flex;
+  min-height: 100%;
+}
+
+.sidebar {
+  flex: none;
+  width: 15rem;
+  background: var(--card);
+  border-right: 1px solid var(--rule);
+  padding: 1.75rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.sidebar__brand {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0 0.6rem 1.5rem;
+  margin-bottom: 0.5rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.sidebar__brand-mark {
+  width: 1.9rem;
+  height: 1.9rem;
+  border: 2px solid var(--stamp);
+  border-radius: 50%;
+  position: relative;
+  flex: none;
+}
+.sidebar__brand-mark::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border: 1px solid var(--stamp);
+  border-radius: 50%;
+  opacity: 0.55;
+}
+
+.sidebar__brand-text {
+  font-weight: 700;
+  font-size: 1rem;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.sidebar__item {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.65rem 0.7rem;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--slate);
+  font-family: "Archivo", sans-serif;
+  font-size: 0.88rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.sidebar__item:hover { background: var(--card-raised); color: var(--ink); }
+.sidebar__item--active {
+  background: rgba(217, 164, 65, 0.1);
+  color: var(--stamp);
+  font-weight: 600;
+}
+
+.main-area {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+}
+
+/* ------------------------------------------------------ governance tabs --- */
+
+.gov-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 2px solid var(--rule);
+}
+
+.gov-header__title {
+  margin: 0;
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+}
+
+.gov-header__sub {
+  margin: 0.3rem 0 0;
+  font-size: 0.85rem;
+  color: var(--slate);
+  max-width: 40rem;
+}
+
+.gov-tabs {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.gov-tab {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.55rem 1rem;
+  border-radius: 3px 3px 0 0;
+  border: 1.5px solid var(--rule);
+  border-bottom: none;
+  background: transparent;
+  color: var(--slate);
+  cursor: pointer;
+  transition: color 120ms ease, background-color 120ms ease;
+}
+.gov-tab:hover { color: var(--ink); }
+.gov-tab--active {
+  background: var(--card);
+  color: var(--stamp);
+  border-color: var(--rule);
+  position: relative;
+}
+.gov-tab--active::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: -1.5px;
+  height: 2px;
+  background: var(--stamp);
+}
+
+.gov-panel {
+  margin-top: 0;
+  padding-top: 1.75rem;
+}
+
+/* -------------------------------------------------------- access denied --- */
+
+.gov-denied {
+  margin-top: 3rem;
+  padding: 2.5rem;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-left: 4px solid var(--pending);
+  max-width: 34rem;
+}
+.gov-denied__title {
+  margin: 0 0 0.6rem;
+  font-size: 1.3rem;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+.gov-denied__detail {
+  font-size: 0.88rem;
+  color: var(--slate);
+  line-height: 1.6;
+}
+.gov-denied__detail code {
+  font-family: "JetBrains Mono", monospace;
+  background: var(--paper);
+  padding: 0.1rem 0.4rem;
+  border-radius: 2px;
+  color: var(--ink);
+}
+
+/* --------------------------------------------------- framework coverage --- */
+
+.fw-methodology {
+  font-size: 0.82rem;
+  color: var(--slate);
+  line-height: 1.6;
+  max-width: 46rem;
+  padding: 1rem 1.2rem;
+  background: var(--card);
+  border-left: 3px solid var(--stamp);
+  border-radius: 2px;
+  margin-top: 1.5rem;
+}
+
+.fw-summary {
+  display: flex;
+  gap: 2rem;
+  margin-top: 1.5rem;
+  flex-wrap: wrap;
+}
+.fw-summary__cell dt {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.58rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--slate);
+  margin-bottom: 0.3rem;
+}
+.fw-summary__cell dd {
+  margin: 0;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.fw-group {
+  margin-top: 2rem;
+}
+.fw-group__title {
+  margin: 0 0 0.9rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+
+.fw-control {
+  padding: 1.1rem 1.3rem;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  margin-bottom: 0.75rem;
+}
+.fw-control__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.fw-control__id {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.7rem;
+  color: var(--stamp);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.fw-control__name {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--ink);
+  margin-left: 0.6rem;
+}
+.fw-control__evidence {
+  margin: 0.6rem 0 0;
+  font-size: 0.82rem;
+  color: var(--slate);
+  line-height: 1.55;
+}
+.fw-control__phase {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.6rem;
+  color: var(--slate);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.status-pill {
+  flex: none;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.28rem 0.6rem;
+  border-radius: 2px;
+  border: 1.5px solid currentColor;
+}
+.status-pill--implemented { color: var(--clean); }
+.status-pill--partial { color: var(--pending); }
+.status-pill--not_applicable { color: var(--slate); }
+
+/* --------------------------------------------------------- gov states ---- */
+
+.gov-loading, .gov-error, .gov-empty {
+  margin-top: 3rem;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.82rem;
+  color: var(--slate);
+  text-align: center;
+  padding: 2rem;
+}
+.gov-error {
+  color: var(--flagged);
+  border-left: 3px solid var(--flagged);
+  background: rgba(229, 72, 77, 0.06);
+  text-align: left;
+  max-width: 34rem;
+  margin-left: 0;
+}
+
+/* ------------------------------------------------------ severity tone --- */
+/* "stamp" (gold) reused for medium severity - completes the filter-btn
+   tone set alongside the existing clean/pending/flagged from Intake. */
+
+.filter-btn--stamp {
+  border-color: var(--stamp);
+  color: var(--stamp);
+  background: rgba(217, 164, 65, 0.08);
+}
+.filter-btn--slate {
+  border-color: var(--slate);
+  color: var(--ink);
+  background: var(--card-raised);
+}
+
+/* ------------------------------------------------------------ findings --- */
+
+.finding-list {
+  margin-top: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.finding-card {
+  padding: 1.4rem 1.6rem;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+}
+
+.finding-card__head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.sev-pill {
+  flex: none;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.3rem 0.6rem;
+  border-radius: 2px;
+  border: 1.5px solid currentColor;
+}
+.sev-pill--flagged { color: var(--flagged); }
+.sev-pill--pending { color: var(--pending); }
+.sev-pill--stamp { color: var(--stamp); }
+.sev-pill--slate { color: var(--slate); }
+
+.finding-card__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.015em;
+}
+
+.finding-card__meta {
+  margin: 0.55rem 0 0;
+  font-size: 0.78rem;
+  color: var(--slate);
+}
+.finding-card__meta .mono { font-family: "JetBrains Mono", monospace; color: var(--ink); }
+
+.finding-card__desc {
+  margin: 0.7rem 0 0;
+  font-size: 0.85rem;
+  color: var(--slate);
+  line-height: 1.6;
+  max-width: 52rem;
+}
+
+.finding-card__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--rule);
+}
+
+.finding-card__cvss {
+  font-size: 0.72rem;
+  color: var(--slate);
+}
+
+.finding-card__status {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.finding-card__status-label {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--slate);
+}
+
+/* ------------------------------------------------------------ audit log --- */
+
+.audit-table-wrap {
+  margin-top: 1.5rem;
+  overflow-x: auto;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+}
+
+.audit-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  min-width: 640px;
+}
+
+.audit-table th {
+  text-align: left;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.58rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--slate);
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--rule);
+  background: var(--card-raised);
+  white-space: nowrap;
+}
+
+.audit-table td {
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid var(--rule);
+  color: var(--ink);
+  vertical-align: middle;
+}
+
+.audit-table td.mono {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.76rem;
+}
+
+.audit-table tbody tr:last-child td { border-bottom: none; }
+.audit-table tbody tr:hover td { background: var(--card-raised); }
+
+.outcome-pill {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.22rem 0.55rem;
+  border-radius: 2px;
+  border: 1.5px solid currentColor;
+}
+.outcome-pill--clean { color: var(--clean); }
+.outcome-pill--flagged { color: var(--flagged); }
+
+/* --------------------------------------------------------- ai requests --- */
+
+.ai-req-card {
+  padding: 1.3rem 1.5rem;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+}
+
+.ai-req-card__head {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+}
+
+.ai-req-card__feature {
+  font-size: 0.78rem;
+  color: var(--stamp);
+  font-weight: 600;
+}
+
+.ai-req-card__meta {
+  font-size: 0.78rem;
+  color: var(--slate);
+}
+
+.ai-req-card__time {
+  margin-left: auto;
+  font-size: 0.72rem;
+  color: var(--slate);
+}
+
+.ai-req-card__label {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.58rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--slate);
+  margin-right: 0.5rem;
+}
+
+.ai-req-card__prompt {
+  margin: 0.75rem 0 0;
+  font-size: 0.84rem;
+  color: var(--ink);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.ai-req-card__flags {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin-top: 0.85rem;
+}
+
+.flag-pill {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.25rem 0.55rem;
+  border-radius: 2px;
+  background: rgba(229, 72, 77, 0.1);
+  color: var(--flagged);
+  border: 1px solid var(--flagged);
+}
+
+.ai-req-card__foot {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--rule);
+  font-size: 0.74rem;
+  color: var(--slate);
+}
+
+.ai-req-card__user {
+  margin-left: auto;
+}
