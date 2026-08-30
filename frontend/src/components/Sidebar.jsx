@@ -3,7 +3,7 @@ const NAV_ITEMS = [
   { key: "governance", label: "Governance" },
 ];
 
-export default function Sidebar({ activeSection, onSelect }) {
+export default function Sidebar({ activeSection, onSelect, user, onLogout }) {
   return (
     <aside className="sidebar">
       <div className="sidebar__brand">
@@ -21,6 +21,16 @@ export default function Sidebar({ activeSection, onSelect }) {
           {item.label}
         </button>
       ))}
+
+      {user && (
+        <div className="sidebar__account">
+          <div className="sidebar__account-name">{user.display_name}</div>
+          <div className="sidebar__account-role">{user.role?.replace("_", " ")}</div>
+          <button type="button" className="logout-btn" onClick={onLogout}>
+            Sign out
+          </button>
+        </div>
+      )}
     </aside>
   );
 }

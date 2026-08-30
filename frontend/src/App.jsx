@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { signIn, whoAmI, listDocuments, deleteDocument, uploadDocument } from "./api.js";
+import { whoAmI, listDocuments, deleteDocument, uploadDocument, restoreSession, logout, onSessionExpired } from "./api.js";
 import IntakeSlot from "./components/IntakeSlot.jsx";
 import CustodyTag from "./components/CustodyTag.jsx";
 import Sidebar from "./components/Sidebar.jsx";
+import LoginForm from "./components/LoginForm.jsx";
 import GovernanceView from "./components/governance/GovernanceView.jsx";
 
 const PENDING = new Set(["pending", "scanning", "in_progress"]);
@@ -22,7 +23,7 @@ function statusTone(status) {
 }
 
 export default function App() {
-  const [phase, setPhase] = useState("connecting");
+  const [phase, setPhase] = useState("connecting"); // connecting | login | faulted | ready
   const [user, setUser] = useState(null);
   const [docs, setDocs] = useState([]);
   const [fault, setFault] = useState(null);
@@ -38,16 +39,28 @@ export default function App() {
     return items;
   }, []);
 
+  const enterReady = useCallback(async () => {
+    const me = await whoAmI();
+    setUser(me);
+    await refresh();
+    setPhase("ready");
+  }, [refresh]);
+
+  // On mount: try to silently restore a session from a refresh token that
+  // survived a page reload. Only fall back to the login form if that
+  // genuinely fails - someone who was already signed in shouldn't have
+  // to re-enter a password just because they hit F5.
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        await signIn();
-        const me = await whoAmI();
+        const restored = await restoreSession();
         if (cancelled) return;
-        setUser(me);
-        await refresh();
-        if (!cancelled) setPhase("ready");
+        if (restored) {
+          await enterReady();
+        } else {
+          setPhase("login");
+        }
       } catch (err) {
         if (!cancelled) {
           setFault(err.message);
@@ -58,7 +71,19 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [refresh]);
+  }, [enterReady]);
+
+  // Registered once - api.js calls this if a token refresh genuinely
+  // fails mid-session (expired or revoked, not just a page load), so an
+  // in-progress session ending returns cleanly to the login form instead
+  // of surfacing a confusing generic error mid-action.
+  useEffect(() => {
+    onSessionExpired(() => {
+      setUser(null);
+      setDocs([]);
+      setPhase("login");
+    });
+  }, []);
 
   // Scanning happens out of band, so poll while anything is still pending.
   useEffect(() => {
@@ -91,6 +116,13 @@ export default function App() {
     } catch (err) {
       setFault(err.message);
     }
+  }
+
+  async function handleLogout() {
+    await logout();
+    setUser(null);
+    setDocs([]);
+    setPhase("login");
   }
 
   // Filtering and sorting happen client-side over whatever the API already
@@ -130,6 +162,14 @@ export default function App() {
     );
   }
 
+  if (phase === "login") {
+    return (
+      <main className="bench bench--centered">
+        <LoginForm onSuccess={enterReady} />
+      </main>
+    );
+  }
+
   if (phase === "faulted") {
     return (
       <main className="bench bench--centered">
@@ -138,7 +178,6 @@ export default function App() {
           <p className="fault__detail">{fault}</p>
           <ul className="fault__checks">
             <li>Is the stack up? <code>docker compose ps</code></li>
-            <li>Does the account in <code>frontend/.env.local</code> exist?</li>
             <li>Is nginx answering? <code>curl http://localhost:8080/healthz</code></li>
           </ul>
         </div>
@@ -151,7 +190,7 @@ export default function App() {
 
   return (
     <div className="shell">
-      <Sidebar activeSection={activeSection} onSelect={setActiveSection} />
+      <Sidebar activeSection={activeSection} onSelect={setActiveSection} user={user} onLogout={handleLogout} />
       <main className="main-area">
         {activeSection === "intake" && (
           <div className="bench">

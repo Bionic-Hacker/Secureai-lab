@@ -1,30 +1,29 @@
 // Thin client for the SecureAI Lab API.
 //
-// Auth: the /documents routes go through get_current_user, so a token is
-// required. Rather than showing a login screen we sign in on load with the
-// dev credentials from .env.local and keep the token in memory. Access tokens
-// last 15 minutes, so any 401 triggers one silent re-login and a retry.
-const EMAIL = import.meta.env.VITE_DEV_EMAIL;
-const PASSWORD = import.meta.env.VITE_DEV_PASSWORD;
-// The multipart field name the upload endpoint expects. If uploads fail with
-// a 422, open http://localhost:8000/docs, expand POST /api/v1/documents, and
-// check the request body field name — then change it here.
-export const UPLOAD_FIELD = "file";
+// Auth: a real login form collects credentials and calls /auth/login.
+// The access token lives in memory only (never in browser storage - it's
+// the bearer credential itself, and keeping it out of anything durable
+// limits what a successful XSS could actually steal). The refresh token
+// is opaque and single-use-with-rotation on the backend, so persisting
+// it in sessionStorage (cleared when the tab closes, unlike
+// localStorage) is what allows a page reload to restore the session
+// without a full re-login, while still bounding exposure to the current
+// browser session.
+const UPLOAD_FIELD = "file";
+export { UPLOAD_FIELD };
+
+const REFRESH_STORAGE_KEY = "secureai_refresh_token";
+
 let accessToken = null;
-export async function signIn() {
-  const res = await fetch("/api/v1/auth/login", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: EMAIL, password: PASSWORD }),
-  });
-  if (!res.ok) {
-    const detail = await readError(res);
-    throw new Error(`Sign-in failed (${res.status}). ${detail}`);
-  }
-  const data = await res.json();
-  accessToken = data.access_token;
-  return data;
+let sessionExpiredCallback = null;
+
+// App.jsx registers this once on mount, so api.js can signal "the
+// session is genuinely gone, show the login form again" without needing
+// a full state-management library wired through every call site.
+export function onSessionExpired(callback) {
+  sessionExpiredCallback = callback;
 }
+
 async function readError(res) {
   try {
     const body = await res.json();
@@ -37,13 +36,103 @@ async function readError(res) {
     return res.statusText;
   }
 }
+
+export async function login(email, password) {
+  const res = await fetch("/api/v1/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  if (!res.ok) {
+    const detail = await readError(res);
+    throw new Error(`Sign-in failed (${res.status}). ${detail}`);
+  }
+  const data = await res.json();
+
+  // Handled honestly rather than silently mishandled: this project's
+  // MFA capability is real, but this login form doesn't implement the
+  // verification step yet - a clear, specific error beats a token pair
+  // that never actually arrives.
+  if (data.mfa_required) {
+    throw new Error(
+      "This account has MFA enabled. This login form doesn't support MFA verification yet - use an account without MFA, or sign in via the API directly."
+    );
+  }
+
+  accessToken = data.access_token;
+  if (data.refresh_token) {
+    sessionStorage.setItem(REFRESH_STORAGE_KEY, data.refresh_token);
+  }
+  return data;
+}
+
+export async function logout() {
+  const refreshToken = sessionStorage.getItem(REFRESH_STORAGE_KEY);
+  sessionStorage.removeItem(REFRESH_STORAGE_KEY);
+  accessToken = null;
+  if (refreshToken) {
+    try {
+      await fetch("/api/v1/auth/logout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      });
+    } catch {
+      // Best-effort - the local session is already cleared either way,
+      // which is what actually matters for the user in front of this
+      // browser right now.
+    }
+  }
+}
+
+async function tryRefresh() {
+  const refreshToken = sessionStorage.getItem(REFRESH_STORAGE_KEY);
+  if (!refreshToken) return false;
+  try {
+    const res = await fetch("/api/v1/auth/refresh", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+    if (!res.ok) {
+      sessionStorage.removeItem(REFRESH_STORAGE_KEY);
+      return false;
+    }
+    const data = await res.json();
+    accessToken = data.access_token;
+    // Rotated on every use server-side - the old refresh token is no
+    // longer valid, so the new one must replace it in storage too.
+    if (data.refresh_token) {
+      sessionStorage.setItem(REFRESH_STORAGE_KEY, data.refresh_token);
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Called once on app mount - if a refresh token survived a page reload,
+// this restores the session silently, without showing the login form
+// to someone who was already signed in.
+export async function restoreSession() {
+  return tryRefresh();
+}
+
 async function request(path, options = {}, allowRetry = true) {
   const headers = { ...(options.headers || {}) };
   if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
   const res = await fetch(path, { ...options, headers });
   if (res.status === 401 && allowRetry) {
-    await signIn();
-    return request(path, options, false);
+    const refreshed = await tryRefresh();
+    if (refreshed) {
+      return request(path, options, false);
+    }
+    // Refresh itself failed - the session is genuinely gone (expired,
+    // revoked, or never existed), not just this one request.
+    if (sessionExpiredCallback) sessionExpiredCallback();
+    const err = new Error("Session expired. Please sign in again.");
+    err.status = 401;
+    throw err;
   }
   if (!res.ok) {
     const err = new Error(`${res.status} — ${await readError(res)}`);
@@ -53,6 +142,7 @@ async function request(path, options = {}, allowRetry = true) {
   if (res.status === 204) return null;
   return res.json();
 }
+
 export function whoAmI() {
   return request("/api/v1/auth/me");
 }

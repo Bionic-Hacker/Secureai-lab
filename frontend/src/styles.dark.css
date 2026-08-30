@@ -1049,3 +1049,144 @@ code, .mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
 .ai-req-card__user {
   margin-left: auto;
 }
+
+/* -------------------------------------------------------------- login --- */
+
+.login-card {
+  max-width: 24rem;
+  width: 100%;
+  padding: 2.75rem 2.5rem;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.2);
+}
+
+.login-card__mark {
+  width: 2.75rem;
+  height: 2.75rem;
+  border: 2px solid var(--stamp);
+  border-radius: 50%;
+  position: relative;
+  margin: 0 auto 1.25rem;
+}
+.login-card__mark::after {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  border: 1px solid var(--stamp);
+  border-radius: 50%;
+  opacity: 0.55;
+}
+
+.login-card__title {
+  margin: 0;
+  text-align: center;
+  font-size: 1.4rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.login-card__sub {
+  margin: 0.4rem 0 0;
+  text-align: center;
+  font-size: 0.82rem;
+  color: var(--slate);
+}
+
+.login-form {
+  margin-top: 1.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+
+.login-form__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.login-form__label {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--slate);
+}
+
+.login-form__field input {
+  font-family: "Archivo", sans-serif;
+  font-size: 0.9rem;
+  padding: 0.65rem 0.8rem;
+  border-radius: 3px;
+  border: 1.5px solid var(--rule);
+  background: var(--paper);
+  color: var(--ink);
+  transition: border-color 120ms ease;
+}
+.login-form__field input:focus-visible {
+  outline: none;
+  border-color: var(--stamp);
+}
+.login-form__field input:disabled {
+  opacity: 0.6;
+}
+
+.login-form__error {
+  margin: 0;
+  padding: 0.75rem 0.9rem;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: #f0a5a8;
+  background: rgba(229, 72, 77, 0.08);
+  border-left: 3px solid var(--flagged);
+  border-radius: 2px;
+}
+
+.login-form__submit {
+  width: 100%;
+  text-align: center;
+  margin-top: 0.4rem;
+}
+.login-form__submit:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* --------------------------------------------------------- logout link --- */
+
+.logout-btn {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--slate);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.4rem 0;
+  text-align: left;
+  transition: color 120ms ease;
+}
+.logout-btn:hover { color: var(--flagged); }
+
+.sidebar__account {
+  margin-top: auto;
+  padding-top: 1rem;
+  border-top: 1px solid var(--rule);
+}
+.sidebar__account-name {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+.sidebar__account-role {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--stamp);
+  margin: 0.2rem 0 0.6rem;
+}
