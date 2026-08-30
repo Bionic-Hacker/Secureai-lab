@@ -11,6 +11,7 @@ from app.api.v1.endpoints import assistant as assistant_endpoints
 from app.api.v1.endpoints import auth as auth_endpoints
 from app.api.v1.endpoints import code_review as code_review_endpoints
 from app.api.v1.endpoints import documents as documents_endpoints
+from app.api.v1.endpoints import governance as governance_endpoints
 from app.api.v1.endpoints import rag as rag_endpoints
 from app.api.v1.endpoints import threat_models as threat_models_endpoints
 from app.core.config import get_settings
@@ -49,6 +50,7 @@ app.add_middleware(RateLimitMiddleware, redis_client=_redis_client)
 
 app.include_router(auth_endpoints.router, prefix=settings.api_v1_prefix)
 app.include_router(documents_endpoints.router, prefix=settings.api_v1_prefix)
+app.include_router(governance_endpoints.router, prefix=settings.api_v1_prefix)
 app.include_router(rag_endpoints.router, prefix=settings.api_v1_prefix)
 app.include_router(assistant_endpoints.router, prefix=settings.api_v1_prefix)
 app.include_router(code_review_endpoints.router, prefix=settings.api_v1_prefix)
