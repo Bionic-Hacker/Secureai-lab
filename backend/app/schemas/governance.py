@@ -64,3 +64,26 @@ FINDING_STATUSES = ("open", "acknowledged", "in_progress", "remediated", "accept
 
 class FindingStatusUpdate(BaseModel):
     status: str = Field(..., pattern="^(" + "|".join(FINDING_STATUSES) + ")$")
+
+
+class AIRequestOut(BaseModel):
+    id: UUID
+    user_id: UUID
+    # Not a column on ai_requests itself (unlike audit_log, which stores
+    # actor_email directly) - populated via a join against users, same
+    # reasoning as document_filename on FindingOut above.
+    user_email: Optional[str] = None
+    feature: str
+    provider: str
+    model: str
+    prompt_redacted: str
+    response_redacted: str
+    input_tokens: Optional[int]
+    output_tokens: Optional[int]
+    guardrail_flags: list
+    blocked: bool
+    latency_ms: Optional[int]
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

@@ -7,11 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user, require_roles
 from app.db.session import get_db
+from app.models.ai_request import AIRequest
 from app.models.audit import AuditLog
 from app.models.code_finding import CodeFinding
 from app.models.document import Document
 from app.models.user import User, UserRole
-from app.schemas.governance import AuditLogEntryOut, FindingOut, FindingStatusUpdate
+from app.schemas.governance import AIRequestOut, AuditLogEntryOut, FindingOut, FindingStatusUpdate
 from app.services.audit_service import record as audit_record
 
 router = APIRouter(prefix="/governance", tags=["governance"])
@@ -178,3 +179,56 @@ async def update_finding_status(
         status=finding.status,
         created_at=finding.created_at,
     )
+
+
+@router.get(
+    "/ai-requests",
+    response_model=list[AIRequestOut],
+    dependencies=[Depends(require_roles(*_GOVERNANCE_ROLES))],
+)
+async def list_ai_requests(
+    limit: int = 50,
+    offset: int = 0,
+    feature: Optional[str] = None,
+    provider: Optional[str] = None,
+    blocked: Optional[bool] = None,
+    db: AsyncSession = Depends(get_db),
+):
+    limit = max(1, min(limit, 200))
+    offset = max(0, offset)
+
+    query = (
+        select(AIRequest, User.email)
+        .join(User, User.id == AIRequest.user_id)
+        .order_by(desc(AIRequest.created_at))
+        .limit(limit)
+        .offset(offset)
+    )
+    if feature:
+        query = query.where(AIRequest.feature == feature)
+    if provider:
+        query = query.where(AIRequest.provider == provider)
+    if blocked is not None:
+        query = query.where(AIRequest.blocked == blocked)
+
+    result = await db.execute(query)
+    rows = result.all()
+    return [
+        AIRequestOut(
+            id=req.id,
+            user_id=req.user_id,
+            user_email=email,
+            feature=req.feature,
+            provider=req.provider,
+            model=req.model,
+            prompt_redacted=req.prompt_redacted,
+            response_redacted=req.response_redacted,
+            input_tokens=req.input_tokens,
+            output_tokens=req.output_tokens,
+            guardrail_flags=req.guardrail_flags,
+            blocked=req.blocked,
+            latency_ms=req.latency_ms,
+            created_at=req.created_at,
+        )
+        for req, email in rows
+    ]
