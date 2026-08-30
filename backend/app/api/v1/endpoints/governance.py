@@ -1,14 +1,18 @@
+import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import require_roles
+from app.core.deps import get_current_user, require_roles
 from app.db.session import get_db
 from app.models.audit import AuditLog
-from app.models.user import UserRole
-from app.schemas.governance import AuditLogEntryOut
+from app.models.code_finding import CodeFinding
+from app.models.document import Document
+from app.models.user import User, UserRole
+from app.schemas.governance import AuditLogEntryOut, FindingOut, FindingStatusUpdate
+from app.services.audit_service import record as audit_record
 
 router = APIRouter(prefix="/governance", tags=["governance"])
 
@@ -18,6 +22,12 @@ router = APIRouter(prefix="/governance", tags=["governance"])
 # permission model to check against; the security_engineer/administrator
 # role itself IS the access boundary for this whole router.
 _GOVERNANCE_ROLES = (UserRole.SECURITY_ENGINEER, UserRole.ADMINISTRATOR)
+
+
+def _client_meta(request: Request) -> tuple[str, str]:
+    ip = request.client.host if request.client else "unknown"
+    ua = request.headers.get("user-agent", "unknown")
+    return ip, ua
 
 
 @router.get(
@@ -43,3 +53,128 @@ async def list_audit_log(
 
     result = await db.execute(query)
     return result.scalars().all()
+
+
+@router.get(
+    "/findings",
+    response_model=list[FindingOut],
+    dependencies=[Depends(require_roles(*_GOVERNANCE_ROLES))],
+)
+async def list_findings(
+    limit: int = 50,
+    offset: int = 0,
+    severity: Optional[str] = None,
+    status_filter: Optional[str] = None,
+    category: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Org-wide finding list, unlike GET /code-review/findings/{document_id}
+    (Phase 5), which is scoped to one document the caller has permission
+    on. This intentionally bypasses per-document ownership - the
+    security_engineer/administrator role is the access boundary here,
+    same reasoning as the audit log above.
+    """
+    limit = max(1, min(limit, 200))
+    offset = max(0, offset)
+
+    query = (
+        select(CodeFinding, Document.original_filename)
+        .join(Document, Document.id == CodeFinding.document_id)
+        .order_by(desc(CodeFinding.created_at))
+        .limit(limit)
+        .offset(offset)
+    )
+    if severity:
+        query = query.where(CodeFinding.severity == severity)
+    if status_filter:
+        query = query.where(CodeFinding.status == status_filter)
+    if category:
+        query = query.where(CodeFinding.category == category)
+
+    result = await db.execute(query)
+    rows = result.all()
+    return [
+        FindingOut(
+            id=finding.id,
+            document_id=finding.document_id,
+            document_filename=filename,
+            tool=finding.tool,
+            rule_id=finding.rule_id,
+            category=finding.category,
+            title=finding.title,
+            description=finding.description,
+            line_number=finding.line_number,
+            cvss_score=finding.cvss_score,
+            cvss_vector=finding.cvss_vector,
+            severity=finding.severity,
+            status=finding.status,
+            created_at=finding.created_at,
+        )
+        for finding, filename in rows
+    ]
+
+
+@router.patch(
+    "/findings/{finding_id}/status",
+    response_model=FindingOut,
+    dependencies=[Depends(require_roles(*_GOVERNANCE_ROLES))],
+)
+async def update_finding_status(
+    finding_id: uuid.UUID,
+    payload: FindingStatusUpdate,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    ip, ua = _client_meta(request)
+
+    query = (
+        select(CodeFinding, Document.original_filename)
+        .join(Document, Document.id == CodeFinding.document_id)
+        .where(CodeFinding.id == finding_id)
+    )
+    result = await db.execute(query)
+    row = result.first()
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Finding not found.")
+    finding, filename = row
+
+    previous_status = finding.status
+    finding.status = payload.status
+
+    await audit_record(
+        db,
+        event_type="finding_status_changed",
+        event_category="governance",
+        actor_user_id=user.id,
+        actor_email=user.email,
+        ip_address=ip,
+        user_agent=ua,
+        resource_type="code_finding",
+        resource_id=str(finding_id),
+        metadata={
+            "previous_status": previous_status,
+            "new_status": payload.status,
+            "rule_id": finding.rule_id,
+        },
+    )
+    await db.commit()
+    await db.refresh(finding)
+
+    return FindingOut(
+        id=finding.id,
+        document_id=finding.document_id,
+        document_filename=filename,
+        tool=finding.tool,
+        rule_id=finding.rule_id,
+        category=finding.category,
+        title=finding.title,
+        description=finding.description,
+        line_number=finding.line_number,
+        cvss_score=finding.cvss_score,
+        cvss_vector=finding.cvss_vector,
+        severity=finding.severity,
+        status=finding.status,
+        created_at=finding.created_at,
+    )

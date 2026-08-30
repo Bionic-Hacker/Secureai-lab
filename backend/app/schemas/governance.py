@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 from uuid import UUID
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class AuditLogEntryOut(BaseModel):
@@ -34,3 +34,33 @@ class AuditLogEntryOut(BaseModel):
         # identically, so this is safe either way rather than assuming
         # one specific driver behavior.
         return str(v) if v is not None else v
+
+
+class FindingOut(BaseModel):
+    id: UUID
+    document_id: UUID
+    # Not a column on code_findings itself - populated via a join against
+    # documents in the query, since a governance-level finding list needs
+    # to say which file, not just an opaque document UUID.
+    document_filename: Optional[str] = None
+    tool: str
+    rule_id: str
+    category: str
+    title: str
+    description: str
+    line_number: Optional[int]
+    cvss_score: float
+    cvss_vector: str
+    severity: str
+    status: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+FINDING_STATUSES = ("open", "acknowledged", "in_progress", "remediated", "accepted_risk", "closed")
+
+
+class FindingStatusUpdate(BaseModel):
+    status: str = Field(..., pattern="^(" + "|".join(FINDING_STATUSES) + ")$")
