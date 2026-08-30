@@ -1,4 +1,6 @@
+import json
 import uuid
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -12,7 +14,13 @@ from app.models.audit import AuditLog
 from app.models.code_finding import CodeFinding
 from app.models.document import Document
 from app.models.user import User, UserRole
-from app.schemas.governance import AIRequestOut, AuditLogEntryOut, FindingOut, FindingStatusUpdate
+from app.schemas.governance import (
+    AIRequestOut,
+    AuditLogEntryOut,
+    FindingOut,
+    FindingStatusUpdate,
+    FrameworkCoverageOut,
+)
 from app.services.audit_service import record as audit_record
 
 router = APIRouter(prefix="/governance", tags=["governance"])
@@ -23,6 +31,8 @@ router = APIRouter(prefix="/governance", tags=["governance"])
 # permission model to check against; the security_engineer/administrator
 # role itself IS the access boundary for this whole router.
 _GOVERNANCE_ROLES = (UserRole.SECURITY_ENGINEER, UserRole.ADMINISTRATOR)
+
+_FRAMEWORK_COVERAGE_PATH = Path(__file__).resolve().parents[3] / "data" / "framework_coverage.json"
 
 
 def _client_meta(request: Request) -> tuple[str, str]:
@@ -232,3 +242,27 @@ async def list_ai_requests(
         )
         for req, email in rows
     ]
+
+
+@router.get(
+    "/framework-coverage",
+    response_model=FrameworkCoverageOut,
+    dependencies=[Depends(require_roles(*_GOVERNANCE_ROLES))],
+)
+async def get_framework_coverage():
+    """
+    Static, curated data - not database-driven like the other governance
+    endpoints. This deliberately doesn't change based on runtime state;
+    it's an explicit, versioned claim about what's actually implemented,
+    reviewed and updated by hand (see the file's own methodology field
+    and Phase 8's build history), not something computed from the current
+    contents of code_findings or any other table.
+    """
+    if not _FRAMEWORK_COVERAGE_PATH.exists():
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            f"Framework coverage data file not found at {_FRAMEWORK_COVERAGE_PATH}",
+        )
+    with open(_FRAMEWORK_COVERAGE_PATH) as f:
+        data = json.load(f)
+    return FrameworkCoverageOut(**data)

@@ -1,0 +1,228 @@
+{
+  "methodology": "Every entry's evidence field traces to something actually built and, where possible, actually tested - not a claim restated from the original project plan. A review comparing the original plan against verified reality found several plan items were aspirational or simply not built; those are excluded here rather than included with a hedge. status values: implemented | partial | not_applicable.",
+  "frameworks": [
+    {
+      "id": "owasp-llm-top-10",
+      "name": "OWASP Top 10 for LLM Applications (2025)",
+      "controls": [
+        {
+          "control_id": "LLM01",
+          "name": "Prompt Injection",
+          "status": "implemented",
+          "phase": 4,
+          "evidence": "Input guardrail (guardrails.py) blocks requests matching seven documented regex patterns before any request reaches the model - confirmed via latency_ms: 0 on every blocked request, proving the model was never called. Covered by a 10-case automated regression suite (tests/test_assistant_guardrails.py) verifying all seven adversarial patterns and three clean-question false-positive checks.\n"
+        },
+        {
+          "control_id": "LLM02",
+          "name": "Insecure Output Handling",
+          "status": "implemented",
+          "phase": 4,
+          "evidence": "Output guardrail (redact_output in guardrails.py) scans every model response for OpenAI keys, AWS access keys, bearer tokens, and private key blocks before it reaches the client, replacing matches with a labeled placeholder.\n"
+        },
+        {
+          "control_id": "LLM04",
+          "name": "Model Denial of Service",
+          "status": "partial",
+          "phase": 1,
+          "evidence": "The AI assistant endpoint is covered by the general Redis rate limit tier (60/min), not a dedicated, tighter AI-specific tier - confirmed directly against rate_limit.py. Token counts are recorded on every request (ai_requests.input_tokens/ output_tokens) but no enforced per-user token budget exists yet.\n"
+        },
+        {
+          "control_id": "LLM05",
+          "name": "Supply Chain Vulnerabilities",
+          "status": "implemented",
+          "phase": 7,
+          "evidence": "SBOM generation, pip-audit, and Trivy container scanning in CI. Six real CVEs fixed with functional verification (not just a green build), three documented as evidence-based accepted risk with expiry dates in .trivyignore, one genuinely deferred with documented root-cause analysis.\n"
+        },
+        {
+          "control_id": "LLM06",
+          "name": "Sensitive Information Disclosure",
+          "status": "implemented",
+          "phase": 3,
+          "evidence": "RAG retrieval applies a server-side document-ID allowlist at query time via a Chroma metadata filter, never as a post-hoc filter on already-returned results. Verified with an automated canary/honeytoken script (verify_rag_canary.py) that plants a unique secret through the real upload pipeline and confirms it is invisible to a different real user while still retrievable by its owner - not just a manual one-time check.\n"
+        },
+        {
+          "control_id": "LLM09",
+          "name": "Overreliance",
+          "status": "partial",
+          "phase": 8,
+          "evidence": "Every AI response carries a real disclaimer field (confirmed in live API responses). Surfacing this in the governance dashboard itself is the feature this phase is actively building.\n"
+        }
+      ]
+    },
+    {
+      "id": "mitre-atlas",
+      "name": "MITRE ATLAS (Adversarial Threat Landscape for AI Systems)",
+      "controls": [
+        {
+          "control_id": "AML.T0051",
+          "name": "LLM Prompt Injection",
+          "status": "implemented",
+          "phase": 4,
+          "evidence": "Same as OWASP LLM01 above - input guardrail plus automated regression suite."
+        },
+        {
+          "control_id": "AML.T0057",
+          "name": "LLM Data Leakage",
+          "status": "implemented",
+          "phase": 3,
+          "evidence": "Same as OWASP LLM06 above - retrieval-time permission filter, verified by the canary script."
+        }
+      ]
+    },
+    {
+      "id": "mitre-attack",
+      "name": "MITRE ATT&CK",
+      "controls": [
+        {
+          "control_id": "T1110",
+          "name": "Brute Force (Credential Access)",
+          "status": "implemented",
+          "phase": 1,
+          "evidence": "Account lockout after a configured failed-attempt threshold, plus IP-based rate limiting on the login endpoint. Both mechanisms were directly debugged and fixed this session - they initially shared an identical threshold, causing rate limiting to always intercept the request meant to trigger lockout, making the more specific 423 response unreachable.\n"
+        },
+        {
+          "control_id": "T1098",
+          "name": "Account Manipulation (Persistence)",
+          "status": "implemented",
+          "phase": 1,
+          "evidence": "Every role change is written to the append-only audit_log table with actor and timestamp."
+        },
+        {
+          "control_id": "T1562",
+          "name": "Impair Defenses (Defense Evasion)",
+          "status": "implemented",
+          "phase": 1,
+          "evidence": "audit_log is INSERT-only at the database grant level - the application's own DB role cannot UPDATE or DELETE it."
+        }
+      ]
+    },
+    {
+      "id": "owasp-api-top-10",
+      "name": "OWASP API Security Top 10 (2023)",
+      "controls": [
+        {
+          "control_id": "API1",
+          "name": "Broken Object Level Authorization",
+          "status": "implemented",
+          "phase": 2,
+          "evidence": "Document-level permission checks on every access, verified with 404-not-403 tests confirming existence isn't leaked to unauthorized users."
+        },
+        {
+          "control_id": "API2",
+          "name": "Broken Authentication",
+          "status": "implemented",
+          "phase": 1,
+          "evidence": "JWT with short-lived access tokens, opaque rotated refresh tokens, Argon2id password hashing, account lockout."
+        },
+        {
+          "control_id": "API5",
+          "name": "Broken Function Level Authorization",
+          "status": "implemented",
+          "phase": 8,
+          "evidence": "require_roles() dependency, applied for the first time this phase to the governance endpoints. Verified both branches directly against a real account: a viewer-role token receives an actual 403 with the exact expected message, and the same account promoted to security_engineer receives 200 with real data.\n"
+        }
+      ]
+    },
+    {
+      "id": "owasp-web-top-10",
+      "name": "OWASP Top 10 (Web, 2021)",
+      "controls": [
+        {
+          "control_id": "A01",
+          "name": "Broken Access Control",
+          "status": "implemented",
+          "phase": 1,
+          "evidence": "RBAC plus object-level permission checks throughout - same evidence as API1/API5 above."
+        },
+        {
+          "control_id": "A03",
+          "name": "Injection",
+          "status": "implemented",
+          "phase": 1,
+          "evidence": "Parameterized queries via SQLAlchemy throughout; Semgrep SAST gate in CI catches string-built-query patterns before merge."
+        },
+        {
+          "control_id": "A06",
+          "name": "Vulnerable and Outdated Components",
+          "status": "implemented",
+          "phase": 7,
+          "evidence": "Same as LLM05 above - pip-audit, Trivy, and the full CVE remediation history."
+        },
+        {
+          "control_id": "A09",
+          "name": "Security Logging and Monitoring Failures",
+          "status": "implemented",
+          "phase": 1,
+          "evidence": "audit_log table plus Prometheus scraping the backend, confirmed via direct target-health check (health: up) during Phase 7 testing."
+        }
+      ]
+    },
+    {
+      "id": "nist-ai-rmf",
+      "name": "NIST AI Risk Management Framework",
+      "controls": [
+        {
+          "control_id": "MAP",
+          "name": "Map",
+          "status": "implemented",
+          "phase": 6,
+          "evidence": "Threat Modeling Module applied to the platform's own RAG cross-tenant isolation - the platform reviewing itself with the same rigor it applies to submitted code."
+        },
+        {
+          "control_id": "MANAGE",
+          "name": "Manage",
+          "status": "implemented",
+          "phase": 8,
+          "evidence": "AI-specific incident response runbook covering seven real scenarios (prompt injection, guardrail bypass, RAG leakage, malware, credential exposure, provider outage, dependency CVEs), each tied to a real endpoint, script, or table rather than generic guidance."
+        }
+      ]
+    },
+    {
+      "id": "nist-800-53",
+      "name": "NIST 800-53 (selected control families)",
+      "controls": [
+        {
+          "control_id": "AU",
+          "name": "Audit and Accountability",
+          "status": "implemented",
+          "phase": 1,
+          "evidence": "audit_log table, INSERT-only grant, now readable via the governance dashboard's own audit-log endpoint."
+        },
+        {
+          "control_id": "SI",
+          "name": "System and Information Integrity",
+          "status": "implemented",
+          "phase": 7,
+          "evidence": "ClamAV malware scanning (Phase 2), SAST/dependency/container scanning in CI (Phase 7)."
+        },
+        {
+          "control_id": "RA",
+          "name": "Risk Assessment",
+          "status": "implemented",
+          "phase": 6,
+          "evidence": "Threat Modeling Module plus CI SAST/DAST gates providing continuous, not point-in-time, risk assessment."
+        }
+      ]
+    },
+    {
+      "id": "eu-ai-act",
+      "name": "EU AI Act (good-faith functional alignment, not a compliance certification)",
+      "controls": [
+        {
+          "control_id": "Art13",
+          "name": "Transparency",
+          "status": "implemented",
+          "phase": 4,
+          "evidence": "Every AI response carries a real disclaimer field, confirmed present in live API responses, not just documented as a plan."
+        },
+        {
+          "control_id": "Art14",
+          "name": "Human Oversight",
+          "status": "implemented",
+          "phase": 8,
+          "evidence": "No auto-remediation exists anywhere in the platform - finding status changes require an explicit human action via PATCH /governance/findings/{id}/status, and every such change is itself audit-logged with before/after values.\n"
+        }
+      ]
+    }
+  ]
+}

@@ -87,3 +87,22 @@ class AIRequestOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class FrameworkControlOut(BaseModel):
+    control_id: str
+    name: str
+    status: str
+    phase: int
+    evidence: str
+
+
+class FrameworkOut(BaseModel):
+    id: str
+    name: str
+    controls: list[FrameworkControlOut]
+
+
+class FrameworkCoverageOut(BaseModel):
+    methodology: str
+    frameworks: list[FrameworkOut]
