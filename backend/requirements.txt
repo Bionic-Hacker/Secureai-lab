@@ -63,3 +63,5 @@ numpy==1.26.4
 # CVE-2026-45830/45831/45833 (see vector_store.py) - not a standalone
 # requirements.txt fix.
 psycopg2-binary==2.9.10
+asyncpg==0.30.0
+asyncpg==0.30.0
