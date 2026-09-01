@@ -106,3 +106,16 @@ class FrameworkOut(BaseModel):
 class FrameworkCoverageOut(BaseModel):
     methodology: str
     frameworks: list[FrameworkOut]
+
+
+class AdminAccountResetRequest(BaseModel):
+    new_password: Optional[str] = Field(default=None, min_length=12, max_length=128)
+
+
+class AdminAccountResetOut(BaseModel):
+    id: UUID
+    email: str
+    display_name: str
+    role: str
+    is_locked: bool
+    password_reset: bool

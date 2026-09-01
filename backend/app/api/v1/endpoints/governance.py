@@ -14,14 +14,18 @@ from app.models.audit import AuditLog
 from app.models.code_finding import CodeFinding
 from app.models.document import Document
 from app.models.user import User, UserRole
+from app.core.security import hash_password
 from app.schemas.governance import (
     AIRequestOut,
     AuditLogEntryOut,
     FindingOut,
     FindingStatusUpdate,
     FrameworkCoverageOut,
+    AdminAccountResetOut,
+    AdminAccountResetRequest,
 )
 from app.services.audit_service import record as audit_record
+
 
 router = APIRouter(prefix="/governance", tags=["governance"])
 
@@ -266,3 +270,56 @@ async def get_framework_coverage():
     with open(_FRAMEWORK_COVERAGE_PATH) as f:
         data = json.load(f)
     return FrameworkCoverageOut(**data)
+
+
+@router.post(
+    "/users/{user_id}/admin-reset",
+    response_model=AdminAccountResetOut,
+)
+async def admin_reset_user_account(
+    user_id: uuid.UUID,
+    payload: AdminAccountResetRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    _: None = Depends(require_roles(*_GOVERNANCE_ROLES)),
+):
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    user.failed_login_attempts = 0
+    user.locked_until = None
+
+    password_reset = False
+    if payload.new_password:
+        user.password_hash = hash_password(payload.new_password)
+        user.must_change_password = True
+        password_reset = True
+
+    await db.commit()
+    await db.refresh(user)
+
+    ip, ua = _client_meta(request)
+    await audit_record(
+        db,
+        event_type="admin_account_reset",
+        event_category="admin_action",
+        actor_user_id=current_user.id,
+        actor_email=current_user.email,
+        resource_type="user",
+        resource_id=str(user.id),
+        ip_address=ip,
+        user_agent=ua,
+        metadata={"target_email": user.email, "password_reset": password_reset},
+    )
+
+    return AdminAccountResetOut(
+        id=user.id,
+        email=user.email,
+        display_name=user.display_name,
+        role=user.role.value,
+        is_locked=False,
+        password_reset=password_reset,
+    )
