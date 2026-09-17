@@ -29,7 +29,7 @@ functions**. It is the wrong home for:
 | FastAPI backend | **Fly.io / Railway / Render** (containerized, same Dockerfile from Phase 1) | Needs persistent connections, background jobs (embedding generation, malware scans), longer request lifetimes |
 | PostgreSQL | **Neon / Supabase / Railway Postgres** (managed) | Managed backups, PITR, connection pooling (pgbouncer) — don't hand-roll HA Postgres for a portfolio project |
 | ChromaDB | Same host as backend, or **Chroma Cloud** | Needs to sit close to the backend for latency; can be a sidecar container on Fly/Railway |
-| ClamAV | Sidecar container next to backend | Same reasoning |
+| ClamAV | Standalone Docker container on a separate Oracle Cloud (OCI) compute instance, reached over TCP | Render's free tier doesn't support a true sidecar for the backend service; ClamAV runs on an existing OCI instance instead, reachable at `CLAMAV_HOST`/`CLAMAV_PORT` env vars. The `clamd` connection has no built-in TLS/auth, so access is restricted at the network layer via OCI security-list ingress rules scoped to Render's outbound CIDR ranges (74.220.48.0/24, 74.220.56.0/24) rather than by the sidecar's inherent network isolation. |
 | Redis (rate limiting, session state) | **Upstash Redis** (serverless-friendly, REST API works from Vercel edge too) | Matches serverless/edge runtime constraints if you ever move guardrail checks to Vercel edge middleware |
 | Secrets | **GitHub Actions Secrets** (CI) + **Vercel Environment Variables** (frontend) + backend host's secret manager | Never in `.env` committed anywhere — `.env.example` stays the only committed env file |
 
