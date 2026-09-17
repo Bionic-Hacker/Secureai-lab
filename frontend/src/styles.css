@@ -18,6 +18,10 @@
   --tag-radius: 3px;
 }
 
+html {
+  font-size: 18px;
+}
+
 * { box-sizing: border-box; }
 
 html, body, #root { height: 100%; }
@@ -324,7 +328,7 @@ code, .mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
   display: flex;
   flex-wrap: wrap;
   gap: 0.28rem 0.5rem;
-  font-size: 0.72rem;
+  font-size: 0.64rem;
   line-height: 1.5;
   color: var(--stamp);
   font-variant-ligatures: none;
