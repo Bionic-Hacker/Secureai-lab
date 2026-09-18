@@ -1,4 +1,6 @@
-﻿const STATUS_COPY = {
+﻿import CodeScanPanel from "./CodeScanPanel.jsx";
+
+const STATUS_COPY = {
   clean: { label: "Cleared", tone: "clean" },
   pending: { label: "In scan", tone: "pending" },
   scanning: { label: "In scan", tone: "pending" },
@@ -74,6 +76,8 @@ export default function CustodyTag({ doc, onDelete }) {
           </code>
         </div>
       )}
+
+      {doc.malware_scan_status === "clean" && <CodeScanPanel doc={doc} />}
 
       <button type="button" className="tag__remove" onClick={onDelete}>
         Remove from shelf

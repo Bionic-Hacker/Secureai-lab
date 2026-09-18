@@ -160,6 +160,12 @@ export function uploadDocument(file) {
 export function deleteDocument(id) {
   return request(`/api/v1/documents/${id}`, { method: "DELETE" });
 }
+export function triggerCodeScan(documentId) {
+  return request(`/api/v1/code-review/scan/${documentId}`, { method: "POST" });
+}
+export function getCodeScanFindings(documentId) {
+  return request(`/api/v1/code-review/findings/${documentId}`);
+}
 export function chatWithAssistant({ message, history = [], useRagContext = true }) {
   return request("/api/v1/assistant/chat", {
     method: "POST",
