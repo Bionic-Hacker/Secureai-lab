@@ -160,6 +160,13 @@ export function uploadDocument(file) {
 export function deleteDocument(id) {
   return request(`/api/v1/documents/${id}`, { method: "DELETE" });
 }
+export function chatWithAssistant({ message, history = [], useRagContext = true }) {
+  return request("/api/v1/assistant/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message, history, use_rag_context: useRagContext }),
+  });
+}
 export async function listRejectedUploads() {
   const data = await request("/api/v1/documents/rejected");
   if (Array.isArray(data)) return data;

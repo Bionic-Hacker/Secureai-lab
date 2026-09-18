@@ -6,6 +6,7 @@ import Sidebar from "./components/Sidebar.jsx";
 import LoginForm from "./components/LoginForm.jsx";
 import GovernanceView from "./components/governance/GovernanceView.jsx";
 import Overview from "./components/Overview.jsx";
+import Assistant from "./components/Assistant.jsx";
 
 const PENDING = new Set(["pending", "scanning", "in_progress"]);
 
@@ -224,6 +225,12 @@ export default function App() {
         {activeSection === "overview" && (
           <div className="bench">
             <Overview />
+          </div>
+        )}
+
+        {activeSection === "assistant" && (
+          <div className="bench">
+            <Assistant />
           </div>
         )}
 
