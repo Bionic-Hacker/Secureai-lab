@@ -27,6 +27,15 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [docs, setDocs] = useState([]);
   const [fault, setFault] = useState(null);
+
+  // Auto-dismiss the error banner - a rejected upload is already logged
+  // and visible in FLAGGED immediately (see handleFiles), so there's
+  // nothing actionable left for the banner to keep demanding attention for.
+  useEffect(() => {
+    if (!fault) return;
+    const timer = setTimeout(() => setFault(null), 5000);
+    return () => clearTimeout(timer);
+  }, [fault]);
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState("all");
   const [sortBy, setSortBy] = useState("date_desc");
@@ -111,6 +120,10 @@ export default function App() {
       await refresh();
     } catch (err) {
       setFault(err.message);
+      // A rejection (e.g. malware) still needs to show up in FLAGGED
+      // right away, not just after a manual refresh - refresh() re-fetches
+      // both real documents and rejected-upload audit entries.
+      await refresh().catch(() => {});
     } finally {
       setBusy(false);
     }
