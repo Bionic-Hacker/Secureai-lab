@@ -5,6 +5,7 @@ import CustodyTag from "./components/CustodyTag.jsx";
 import Sidebar from "./components/Sidebar.jsx";
 import LoginForm from "./components/LoginForm.jsx";
 import GovernanceView from "./components/governance/GovernanceView.jsx";
+import Overview from "./components/Overview.jsx";
 
 const PENDING = new Set(["pending", "scanning", "in_progress"]);
 
@@ -39,7 +40,7 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState("all");
   const [sortBy, setSortBy] = useState("date_desc");
-  const [activeSection, setActiveSection] = useState("intake");
+  const [activeSection, setActiveSection] = useState("overview");
   const pollRef = useRef(null);
 
   const refresh = useCallback(async () => {
@@ -220,6 +221,12 @@ export default function App() {
     <div className="shell">
       <Sidebar activeSection={activeSection} onSelect={setActiveSection} user={user} onLogout={handleLogout} />
       <main className="main-area">
+        {activeSection === "overview" && (
+          <div className="bench">
+            <Overview />
+          </div>
+        )}
+
         {activeSection === "intake" && (
           <div className="bench">
             <header className="masthead">

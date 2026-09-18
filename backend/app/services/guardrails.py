@@ -37,14 +37,39 @@ _SECRET_PATTERNS = [
     ("private_key_block", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----")),
 ]
 
+# Distinct from _INJECTION_PATTERNS: injection tries to override/reveal
+# instructions; jailbreak tries to get the model to roleplay past its own
+# safety behavior (a persona with "no restrictions", a claimed override
+# authority, etc.) without necessarily touching the system prompt at all.
+# Same caveat as above — a baseline pattern set, not complete coverage.
+_JAILBREAK_PATTERNS = [
+    re.compile(r"\bDAN\b.{0,20}(mode|prompt|jailbreak)", re.I),
+    re.compile(r"do anything now", re.I),
+    re.compile(r"(pretend|act|roleplay) (that )?you (have no|don't have any) (restrictions|rules|guidelines|filters)", re.I),
+    re.compile(r"you have no (ethical |content )?(restrictions|guidelines|filters)", re.I),
+    re.compile(r"respond (as|like) (an? )?(unfiltered|uncensored|unrestricted) (ai|model|assistant)", re.I),
+    re.compile(r"(bypass|ignore|disable) your (safety|content) (filters|guidelines|restrictions)", re.I),
+    re.compile(r"i am (a |your )?(developer|admin|the creator) (and )?(authorize|override|grant)", re.I),
+]
+
 
 def check_input(text: str) -> list[str]:
-    """Returns a list of flag names for any injection patterns matched. Empty list = clean."""
+    """
+    Returns a list of flag names for any injection or jailbreak patterns
+    matched. Empty list = clean. Both categories are checked independently
+    (unlike a single pattern group, where the first match was enough
+    signal) since they represent genuinely different attack techniques —
+    a prompt could plausibly trip both.
+    """
     flags = []
     for pattern in _INJECTION_PATTERNS:
         if pattern.search(text):
             flags.append("prompt_injection_suspected")
-            break  # one flag is enough signal; no need to enumerate every matching pattern
+            break
+    for pattern in _JAILBREAK_PATTERNS:
+        if pattern.search(text):
+            flags.append("jailbreak_suspected")
+            break
     return flags
 
 

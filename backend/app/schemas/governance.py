@@ -4,6 +4,18 @@ from uuid import UUID
 from pydantic import BaseModel, Field, field_validator
 
 
+class ServiceComponentHealth(BaseModel):
+    name: str
+    status: str  # "healthy" | "degraded" | "unreachable"
+    detail: Optional[str] = None
+    latency_ms: Optional[float] = None
+
+
+class ServiceHealthOut(BaseModel):
+    checked_at: datetime
+    components: list[ServiceComponentHealth]
+
+
 class AuditLogEntryOut(BaseModel):
     id: int
     occurred_at: datetime

@@ -1,12 +1,17 @@
 import json
+import time
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+import clamd
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy import desc, select
+from redis.asyncio import Redis
+from sqlalchemy import desc, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.deps import get_current_user, require_roles
 from app.db.session import get_db
 from app.models.ai_request import AIRequest
@@ -23,8 +28,13 @@ from app.schemas.governance import (
     FrameworkCoverageOut,
     AdminAccountResetOut,
     AdminAccountResetRequest,
+    ServiceComponentHealth,
+    ServiceHealthOut,
 )
+from app.services import vector_store
 from app.services.audit_service import record as audit_record
+
+_health_settings = get_settings()
 
 
 router = APIRouter(prefix="/governance", tags=["governance"])
@@ -43,6 +53,81 @@ def _client_meta(request: Request) -> tuple[str, str]:
     ip = request.client.host if request.client else "unknown"
     ua = request.headers.get("user-agent", "unknown")
     return ip, ua
+
+
+async def _check_postgres(db: AsyncSession) -> ServiceComponentHealth:
+    start = time.monotonic()
+    try:
+        await db.execute(text("SELECT 1"))
+        return ServiceComponentHealth(
+            name="postgresql", status="healthy", latency_ms=round((time.monotonic() - start) * 1000, 1)
+        )
+    except Exception as exc:
+        return ServiceComponentHealth(name="postgresql", status="unreachable", detail=str(exc))
+
+
+async def _check_redis() -> ServiceComponentHealth:
+    start = time.monotonic()
+    client = Redis.from_url(_health_settings.redis_url, decode_responses=False, socket_timeout=3)
+    try:
+        await client.ping()
+        return ServiceComponentHealth(
+            name="redis", status="healthy", latency_ms=round((time.monotonic() - start) * 1000, 1)
+        )
+    except Exception as exc:
+        return ServiceComponentHealth(name="redis", status="unreachable", detail=str(exc))
+    finally:
+        await client.aclose()
+
+
+async def _check_chromadb() -> ServiceComponentHealth:
+    start = time.monotonic()
+    try:
+        client = vector_store._get_client()
+        client.heartbeat()
+        return ServiceComponentHealth(
+            name="chromadb", status="healthy", latency_ms=round((time.monotonic() - start) * 1000, 1)
+        )
+    except Exception as exc:
+        return ServiceComponentHealth(name="chromadb", status="unreachable", detail=str(exc))
+
+
+async def _check_clamav() -> ServiceComponentHealth:
+    start = time.monotonic()
+    try:
+        cd = clamd.ClamdNetworkSocket(
+            host=_health_settings.clamav_host, port=_health_settings.clamav_port, timeout=5
+        )
+        cd.ping()
+        return ServiceComponentHealth(
+            name="clamav", status="healthy", latency_ms=round((time.monotonic() - start) * 1000, 1)
+        )
+    except Exception as exc:
+        return ServiceComponentHealth(name="clamav", status="unreachable", detail=str(exc))
+
+
+@router.get(
+    "/service-health",
+    response_model=ServiceHealthOut,
+    dependencies=[Depends(require_roles(*_GOVERNANCE_ROLES))],
+)
+async def get_service_health(db: AsyncSession = Depends(get_db)):
+    """
+    Live checks, not cached/static data - each dependency is actually
+    pinged on every call. Every check is independently try/excepted so
+    one dependency being down never breaks the response for the others
+    (a getattr-driven `client._get_client()` reach into vector_store's
+    module-private connection is intentional here: this endpoint only
+    needs a heartbeat, not a public API this module doesn't otherwise
+    expose).
+    """
+    components = [
+        await _check_postgres(db),
+        await _check_redis(),
+        await _check_chromadb(),
+        await _check_clamav(),
+    ]
+    return ServiceHealthOut(checked_at=datetime.now(timezone.utc), components=components)
 
 
 @router.get(

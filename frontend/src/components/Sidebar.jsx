@@ -1,4 +1,5 @@
 const NAV_ITEMS = [
+  { key: "overview", label: "Overview" },
   { key: "intake", label: "Document Vault" },
   { key: "governance", label: "Governance" },
 ];

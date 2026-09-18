@@ -176,6 +176,10 @@ export function getFrameworkCoverage() {
   return request("/api/v1/governance/framework-coverage");
 }
 
+export function getServiceHealth() {
+  return request("/api/v1/governance/service-health");
+}
+
 export function listFindings({ limit = 50, offset = 0, severity, status, category } = {}) {
   const params = new URLSearchParams({ limit, offset });
   if (severity) params.set("severity", severity);
