@@ -7,6 +7,7 @@ import LoginForm from "./components/LoginForm.jsx";
 import GovernanceView from "./components/governance/GovernanceView.jsx";
 import Overview from "./components/Overview.jsx";
 import Assistant from "./components/Assistant.jsx";
+import ThreatModeling from "./components/ThreatModeling.jsx";
 
 const PENDING = new Set(["pending", "scanning", "in_progress"]);
 
@@ -231,6 +232,12 @@ export default function App() {
         {activeSection === "assistant" && (
           <div className="bench">
             <Assistant />
+          </div>
+        )}
+
+        {activeSection === "threatmodel" && (
+          <div className="bench">
+            <ThreatModeling />
           </div>
         )}
 

@@ -122,6 +122,22 @@ async def update_entry(
     return entry
 
 
+@router.delete("/{threat_model_id}/entries/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_entry(
+    threat_model_id: uuid.UUID, entry_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(ThreatEntry).where(ThreatEntry.id == entry_id, ThreatEntry.threat_model_id == threat_model_id)
+    )
+    entry = result.scalar_one_or_none()
+    if entry is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Threat entry not found.")
+
+    await db.delete(entry)
+    await db.commit()
+
+
 @router.post("/{threat_model_id}/review", response_model=ThreatModelOut)
 async def mark_reviewed(
     threat_model_id: uuid.UUID,

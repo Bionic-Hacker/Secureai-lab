@@ -173,6 +173,37 @@ export function chatWithAssistant({ message, history = [], useRagContext = true 
     body: JSON.stringify({ message, history, use_rag_context: useRagContext }),
   });
 }
+
+export function listThreatModels() {
+  return request("/api/v1/threat-models");
+}
+export function createThreatModel({ title, systemDescription, generateWithAi = false }) {
+  return request("/api/v1/threat-models", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title, system_description: systemDescription, generate_with_ai: generateWithAi }),
+  });
+}
+export function getThreatModel(id) {
+  return request(`/api/v1/threat-models/${id}`);
+}
+export function addThreatEntry(threatModelId, entry) {
+  return request(`/api/v1/threat-models/${threatModelId}/entries`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(entry),
+  });
+}
+export function updateThreatEntry(threatModelId, entryId, updates) {
+  return request(`/api/v1/threat-models/${threatModelId}/entries/${entryId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(updates),
+  });
+}
+export function reviewThreatModel(threatModelId) {
+  return request(`/api/v1/threat-models/${threatModelId}/review`, { method: "POST" });
+}
 export async function listRejectedUploads() {
   const data = await request("/api/v1/documents/rejected");
   if (Array.isArray(data)) return data;
