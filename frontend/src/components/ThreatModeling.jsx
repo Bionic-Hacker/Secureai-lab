@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   listThreatModels,
   createThreatModel,
@@ -99,10 +99,11 @@ function EntryForm({ threatModelId, onAdded }) {
   );
 }
 
-function ThreatModelDetail({ modelId, onBack }) {
+function ThreatModelDetail({ modelId, onBack, justCreated }) {
   const [model, setModel] = useState(null);
   const [state, setState] = useState("loading");
   const [error, setError] = useState(null);
+  const addEntryRef = useRef(null);
 
   const load = useCallback(async () => {
     setState("loading");
@@ -119,6 +120,15 @@ function ThreatModelDetail({ modelId, onBack }) {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Right after creating a model, skip past six empty STRIDE categories
+  // and drop the person straight into the form that actually adds
+  // something - the empty-category view was a dead end otherwise.
+  useEffect(() => {
+    if (justCreated && state === "ready" && addEntryRef.current) {
+      addEntryRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [justCreated, state]);
 
   async function handleStatusChange(entryId, mitigation_status) {
     const updated = await updateThreatEntry(modelId, entryId, { mitigation_status });
@@ -162,14 +172,22 @@ function ThreatModelDetail({ modelId, onBack }) {
         </div>
       </div>
 
+      {model.entries.length === 0 && (
+        <div className="overview-panel">
+          <p className="gov-empty">No entries yet — add the first one below.</p>
+        </div>
+      )}
+
       {STRIDE_CATEGORIES.map((cat) => {
         const catEntries = model.entries.filter((e) => e.stride_category === cat.key);
+        // Only render a category once it actually has something in it -
+        // showing all six as empty panels on every model, forever, was
+        // pure clutter rather than useful structure.
+        if (catEntries.length === 0) return null;
         return (
           <div className="overview-panel" key={cat.key}>
             <div className="overview-panel__title">{cat.label}</div>
-            {catEntries.length === 0 ? (
-              <p className="gov-empty">No entries yet.</p>
-            ) : (
+            {(
               <div className="tm-entries">
                 {catEntries.map((entry) => (
                   <div className="tm-entry" key={entry.id}>
@@ -200,7 +218,7 @@ function ThreatModelDetail({ modelId, onBack }) {
         );
       })}
 
-      <div className="overview-panel">
+      <div className="overview-panel" ref={addEntryRef}>
         <div className="overview-panel__title">Add Entry</div>
         <EntryForm
           threatModelId={modelId}
@@ -284,6 +302,7 @@ export default function ThreatModeling() {
   const [state, setState] = useState("loading");
   const [error, setError] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
+  const [justCreatedId, setJustCreatedId] = useState(null);
 
   const load = useCallback(async () => {
     setState("loading");
@@ -302,7 +321,13 @@ export default function ThreatModeling() {
   }, [load]);
 
   if (selectedId) {
-    return <ThreatModelDetail modelId={selectedId} onBack={() => { setSelectedId(null); load(); }} />;
+    return (
+      <ThreatModelDetail
+        modelId={selectedId}
+        justCreated={selectedId === justCreatedId}
+        onBack={() => { setSelectedId(null); setJustCreatedId(null); load(); }}
+      />
+    );
   }
 
   return (
@@ -356,7 +381,7 @@ export default function ThreatModeling() {
       {view === "create" && (
         <div style={{ marginTop: "1.5rem" }}>
           <CreateForm
-            onCreated={(id) => { setView("list"); setSelectedId(id); }}
+            onCreated={(id) => { setView("list"); setSelectedId(id); setJustCreatedId(id); }}
             onCancel={() => setView("list")}
           />
         </div>
