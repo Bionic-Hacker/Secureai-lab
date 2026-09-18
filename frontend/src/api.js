@@ -160,6 +160,11 @@ export function uploadDocument(file) {
 export function deleteDocument(id) {
   return request(`/api/v1/documents/${id}`, { method: "DELETE" });
 }
+export async function listRejectedUploads() {
+  const data = await request("/api/v1/documents/rejected");
+  if (Array.isArray(data)) return data;
+  return data?.items ?? data?.documents ?? data?.results ?? [];
+}
 
 // ---------------------------------------------------------------- governance ---
 // Every function below hits a role-gated endpoint (security_engineer or

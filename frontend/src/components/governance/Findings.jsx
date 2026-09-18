@@ -105,13 +105,15 @@ export default function Findings() {
                 <h3 className="finding-card__title">{f.title}</h3>
               </div>
               <p className="finding-card__meta">
-                <span className="mono">{f.document_filename ?? f.document_id}</span> · {f.tool} · {f.rule_id}
+                <span className="mono">{f.document_filename ?? f.document_id ?? "—"}</span> · {f.tool} · {f.rule_id}
                 {f.line_number != null && <> · line {f.line_number}</>}
               </p>
               <p className="finding-card__desc">{f.description}</p>
               <div className="finding-card__foot">
                 <span className="mono finding-card__cvss">
-                  CVSS {f.cvss_score.toFixed(1)} — {f.cvss_vector}
+                  {f.cvss_score != null
+                    ? <>CVSS {f.cvss_score.toFixed(1)} — {f.cvss_vector}</>
+                    : "No CVSS score"}
                 </span>
                 <label className="finding-card__status">
                   <span className="finding-card__status-label">Status</span>

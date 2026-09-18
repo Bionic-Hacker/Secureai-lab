@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { whoAmI, listDocuments, deleteDocument, uploadDocument, restoreSession, logout, onSessionExpired } from "./api.js";
+import { whoAmI, listDocuments, listRejectedUploads, deleteDocument, uploadDocument, restoreSession, logout, onSessionExpired } from "./api.js";
 import IntakeSlot from "./components/IntakeSlot.jsx";
 import CustodyTag from "./components/CustodyTag.jsx";
 import Sidebar from "./components/Sidebar.jsx";
@@ -34,8 +34,16 @@ export default function App() {
   const pollRef = useRef(null);
 
   const refresh = useCallback(async () => {
-    const items = await listDocuments();
-    setDocs(items);
+    // Rejected uploads never become a real Document row (see
+    // document_service.upload_document - an infected file leaves no
+    // trace in storage), so they're fetched separately from the audit
+    // trail and merged in here as read-only, non-deletable entries.
+    const [items, rejected] = await Promise.all([
+      listDocuments(),
+      listRejectedUploads().catch(() => []),
+    ]);
+    const rejectedAsDocs = rejected.map((r) => ({ ...r, _rejected: true }));
+    setDocs([...items, ...rejectedAsDocs]);
     return items;
   }, []);
 
@@ -110,6 +118,13 @@ export default function App() {
 
   async function handleDelete(id) {
     setFault(null);
+    const target = docs.find((d) => d.id === id);
+    if (target?._rejected) {
+      // Synthesized from the audit trail, not a real stored document -
+      // nothing to delete server-side. Just drop it from the shelf view.
+      setDocs((prev) => prev.filter((d) => d.id !== id));
+      return;
+    }
     try {
       await deleteDocument(id);
       setDocs((prev) => prev.filter((d) => d.id !== id));

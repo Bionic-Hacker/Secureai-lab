@@ -37,8 +37,14 @@ class AuditLogEntryOut(BaseModel):
 
 
 class FindingOut(BaseModel):
-    id: UUID
-    document_id: UUID
+    # str, not UUID: code-review findings use a UUID; audit-derived
+    # findings (e.g. malware-rejected uploads) use "audit-<int>" since
+    # audit_log's primary key is a BigInteger, not a UUID.
+    id: str
+    # Optional: audit-derived findings (rejected uploads) have no
+    # persisted Document row to point at - see document_service.upload_document,
+    # which deliberately never creates one for an infected file.
+    document_id: Optional[UUID] = None
     # Not a column on code_findings itself - populated via a join against
     # documents in the query, since a governance-level finding list needs
     # to say which file, not just an opaque document UUID.
@@ -48,9 +54,9 @@ class FindingOut(BaseModel):
     category: str
     title: str
     description: str
-    line_number: Optional[int]
-    cvss_score: float
-    cvss_vector: str
+    line_number: Optional[int] = None
+    cvss_score: Optional[float] = None
+    cvss_vector: Optional[str] = None
     severity: str
     status: str
     created_at: datetime

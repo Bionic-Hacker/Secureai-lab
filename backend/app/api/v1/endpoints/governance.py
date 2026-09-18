@@ -90,28 +90,30 @@ async def list_findings(
     security_engineer/administrator role is the access boundary here,
     same reasoning as the audit log above.
     """
-    limit = max(1, min(limit, 200))
-    offset = max(0, offset)
+    # Fetches more than the requested page from each source (code
+    # findings, audit-derived findings) before merging and re-paginating
+    # in Python below - two separate tables can't be paginated together
+    # at the SQL level with a single LIMIT/OFFSET, and this project's
+    # scale doesn't warrant a UNION-based query for it.
+    fetch_limit = limit + offset
 
-    query = (
+    code_query = (
         select(CodeFinding, Document.original_filename)
         .join(Document, Document.id == CodeFinding.document_id)
         .order_by(desc(CodeFinding.created_at))
-        .limit(limit)
-        .offset(offset)
+        .limit(fetch_limit)
     )
     if severity:
-        query = query.where(CodeFinding.severity == severity)
+        code_query = code_query.where(CodeFinding.severity == severity)
     if status_filter:
-        query = query.where(CodeFinding.status == status_filter)
+        code_query = code_query.where(CodeFinding.status == status_filter)
     if category:
-        query = query.where(CodeFinding.category == category)
+        code_query = code_query.where(CodeFinding.category == category)
 
-    result = await db.execute(query)
-    rows = result.all()
-    return [
+    code_result = await db.execute(code_query)
+    findings: list[FindingOut] = [
         FindingOut(
-            id=finding.id,
+            id=str(finding.id),
             document_id=finding.document_id,
             document_filename=filename,
             tool=finding.tool,
@@ -126,8 +128,51 @@ async def list_findings(
             status=finding.status,
             created_at=finding.created_at,
         )
-        for finding, filename in rows
+        for finding, filename in code_result.all()
     ]
+
+    # Malware-rejected uploads never get a Document row (see
+    # document_service.upload_document), so they can't appear via
+    # CodeFinding at all - surfaced here from the audit trail instead,
+    # normalized into the same FindingOut shape.
+    include_malware = category is None or category == "malware"
+    if include_malware and status_filter in (None, "blocked") and severity in (None, "critical"):
+        audit_query = (
+            select(AuditLog)
+            .where(AuditLog.event_type == "document_upload_failed")
+            .order_by(desc(AuditLog.occurred_at))
+            .limit(fetch_limit)
+        )
+        audit_result = await db.execute(audit_query)
+        for entry in audit_result.scalars().all():
+            metadata = entry.metadata_ or {}
+            # document_upload_failed covers every upload rejection reason
+            # (missing extension, bad content-type, oversized file, etc.),
+            # not just malware - only the malware-scan rejection message
+            # belongs here as a "malware detected" finding.
+            if metadata.get("reason") != "File was rejected by malware scanning.":
+                continue
+            findings.append(
+                FindingOut(
+                    id=f"audit-{entry.id}",
+                    document_id=None,
+                    document_filename=metadata.get("filename"),
+                    tool="ClamAV",
+                    rule_id="malware-scan-rejection",
+                    category="malware",
+                    title="Malware detected on upload",
+                    description=metadata.get("reason", "File was rejected by malware scanning."),
+                    line_number=None,
+                    cvss_score=None,
+                    cvss_vector=None,
+                    severity="critical",
+                    status="blocked",
+                    created_at=entry.occurred_at,
+                )
+            )
+
+    findings.sort(key=lambda f: f.created_at, reverse=True)
+    return findings[offset : offset + limit]
 
 
 @router.patch(

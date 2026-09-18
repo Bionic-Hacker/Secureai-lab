@@ -3,13 +3,14 @@ import uuid
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, UploadFile, status
 from fastapi.responses import Response
-from sqlalchemy import select
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user
 from app.db.session import get_db
+from app.models.audit import AuditLog
 from app.models.user import User
-from app.schemas.document import DocumentOut, ShareRequest
+from app.schemas.document import DocumentOut, RejectedUploadOut, ShareRequest
 from app.services import document_service, ingestion_service, vector_store
 from app.services.audit_service import record as audit_record
 
@@ -37,7 +38,7 @@ async def upload(
         await audit_record(
             db, event_type="document_upload_failed", event_category="upload",
             actor_user_id=user.id, actor_email=user.email, ip_address=ip, user_agent=ua,
-            outcome="failure", metadata={"reason": e.message},
+            outcome="failure", metadata={"reason": e.message, "filename": file.filename},
         )
         await db.commit()
         raise HTTPException(e.status_code, e.message)
@@ -69,6 +70,54 @@ async def list_my_documents(
     limit = max(1, min(limit, 200))
     offset = max(0, offset)
     return await document_service.list_documents(db, user, limit=limit, offset=offset)
+
+
+@router.get("/rejected", response_model=list[RejectedUploadOut])
+async def list_rejected_uploads(
+    limit: int = 50,
+    offset: int = 0,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """
+    Rejected uploads never get a Document row (see document_service.
+    upload_document - an infected file leaves no trace in storage), so
+    they can't be returned by GET /documents above. Reads the audit
+    trail instead, scoped to this user's own rejections only, same as
+    list_documents' ownership scoping.
+
+    Declared before GET /{document_id} below so FastAPI matches this
+    literal path first - otherwise "rejected" would be parsed as a
+    document_id UUID and 422 instead of hitting this route.
+    """
+    limit = max(1, min(limit, 200))
+    offset = max(0, offset)
+
+    query = (
+        select(AuditLog)
+        .where(
+            AuditLog.event_type == "document_upload_failed",
+            AuditLog.actor_user_id == user.id,
+        )
+        .order_by(desc(AuditLog.occurred_at))
+        .limit(limit)
+        .offset(offset)
+    )
+    result = await db.execute(query)
+
+    rejections = []
+    for entry in result.scalars().all():
+        metadata = entry.metadata_ or {}
+        if metadata.get("reason") != "File was rejected by malware scanning.":
+            continue
+        rejections.append(
+            RejectedUploadOut(
+                id=f"audit-{entry.id}",
+                original_filename=metadata.get("filename") or "Unknown file",
+                created_at=entry.occurred_at,
+            )
+        )
+    return rejections
 
 
 @router.get("/{document_id}", response_model=DocumentOut)
