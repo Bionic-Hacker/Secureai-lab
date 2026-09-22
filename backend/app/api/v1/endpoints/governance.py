@@ -31,7 +31,7 @@ from app.schemas.governance import (
     ServiceComponentHealth,
     ServiceHealthOut,
 )
-from app.services import vector_store
+from app.services import kyora_service, vector_store
 from app.services.audit_service import record as audit_record
 
 _health_settings = get_settings()
@@ -453,3 +453,22 @@ async def admin_reset_user_account(
         is_locked=False,
         password_reset=password_reset,
     )
+
+
+@router.get(
+    "/kyora/frameworks",
+    dependencies=[Depends(require_roles(*_GOVERNANCE_ROLES))],
+)
+async def list_kyora_frameworks():
+    """
+    Live data from Kyora IQ's external compliance MCP server (NIST
+    800-53, HIPAA, SOC 2, ISO 42001, EU AI Act, OWASP, MITRE, and
+    others) - a separate, general-purpose reference, not a replacement
+    for this project's own curated framework_coverage.json (see
+    get_framework_coverage above), which stays a hand-verified claim
+    about what THIS project specifically implements.
+    """
+    try:
+        return await kyora_service.list_frameworks()
+    except kyora_service.KyoraServiceError as e:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e))

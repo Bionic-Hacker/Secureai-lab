@@ -80,6 +80,10 @@ class Settings(BaseSettings):
     chroma_auth_token: str = ""
     chroma_collection_name: str = "document_chunks"
 
+    # --- Kyora IQ compliance MCP server (external, read-only) ---
+    kyora_mcp_url: str = "https://kyora-iq-mcp.onrender.com/mcp"
+    kyora_mcp_token: str = ""
+
     # --- RAG ingestion/retrieval ---
     rag_chunk_size_tokens: int = 500
     rag_chunk_overlap_tokens: int = 50

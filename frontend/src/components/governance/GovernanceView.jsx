@@ -3,12 +3,14 @@ import FrameworkCoverage from "./FrameworkCoverage.jsx";
 import Findings from "./Findings.jsx";
 import AuditLog from "./AuditLog.jsx";
 import AIRequests from "./AIRequests.jsx";
+import KyoraReference from "./KyoraReference.jsx";
 
 const TABS = [
   { key: "framework-coverage", label: "Framework Coverage" },
   { key: "findings", label: "Findings" },
   { key: "audit-log", label: "Audit Log" },
   { key: "ai-requests", label: "AI Requests" },
+  { key: "kyora-reference", label: "Compliance Reference" },
 ];
 
 export default function GovernanceView() {
@@ -46,6 +48,7 @@ export default function GovernanceView() {
         {activeTab === "findings" && <Findings />}
         {activeTab === "audit-log" && <AuditLog />}
         {activeTab === "ai-requests" && <AIRequests />}
+        {activeTab === "kyora-reference" && <KyoraReference />}
       </div>
     </div>
   );
