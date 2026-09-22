@@ -1611,3 +1611,22 @@ code, .mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
   font-size: 0.8rem;
   color: var(--slate);
 }
+
+.tm-entry__delete {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: var(--flagged);
+  cursor: pointer;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.85;
+  transition: opacity 120ms ease;
+}
+.tm-entry__delete:hover {
+  opacity: 1;
+}

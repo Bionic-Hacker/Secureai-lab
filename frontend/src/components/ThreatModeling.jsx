@@ -5,6 +5,7 @@ import {
   getThreatModel,
   addThreatEntry,
   updateThreatEntry,
+  deleteThreatEntry,
   reviewThreatModel,
 } from "../api.js";
 
@@ -130,6 +131,14 @@ function ThreatModelDetail({ modelId, onBack, justCreated }) {
     }
   }, [justCreated, state]);
 
+  async function handleDeleteEntry(entryId) {
+    await deleteThreatEntry(modelId, entryId);
+    setModel((prev) => ({
+      ...prev,
+      entries: prev.entries.filter((e) => e.id !== entryId),
+    }));
+  }
+
   async function handleStatusChange(entryId, mitigation_status) {
     const updated = await updateThreatEntry(modelId, entryId, { mitigation_status });
     setModel((prev) => ({
@@ -196,6 +205,21 @@ function ThreatModelDetail({ modelId, onBack, justCreated }) {
                       {entry.ai_generated && !entry.human_edited && (
                         <span className="flag-pill">AI-generated</span>
                       )}
+                      <button
+                        type="button"
+                        className="tm-entry__delete"
+                        aria-label="Delete entry"
+                        title="Delete entry"
+                        onClick={() => handleDeleteEntry(entry.id)}
+                      >
+                        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="2.75" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="3 6 5 6 21 6" />
+                          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                          <path d="M10 11v6" />
+                          <path d="M14 11v6" />
+                          <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                        </svg>
+                      </button>
                     </div>
                     <p className="tm-entry__desc">{entry.threat_description}</p>
                     <p className="tm-entry__mitigation">

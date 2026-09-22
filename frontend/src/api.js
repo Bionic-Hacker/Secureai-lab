@@ -201,6 +201,11 @@ export function updateThreatEntry(threatModelId, entryId, updates) {
     body: JSON.stringify(updates),
   });
 }
+export function deleteThreatEntry(threatModelId, entryId) {
+  return request(`/api/v1/threat-models/${threatModelId}/entries/${entryId}`, {
+    method: "DELETE",
+  });
+}
 export function reviewThreatModel(threatModelId) {
   return request(`/api/v1/threat-models/${threatModelId}/review`, { method: "POST" });
 }
