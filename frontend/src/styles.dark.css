@@ -1707,3 +1707,28 @@ code, .mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
   color: var(--slate); white-space: pre-wrap;
 }
 .chat-msg--degraded { border-style: dashed; }
+
+/* ---------- Governance: Kyora IQ drill-downs ---------- */
+.kyora-card--link {
+  font: inherit; color: inherit; text-align: left; width: 100%; cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.kyora-card--link:hover { border-color: var(--stamp); transform: translateY(-1px); }
+.stat-card__hint { margin-top: 0.4rem; font-size: 0.7rem; color: var(--slate); }
+.kyora-card--link .stat-card__hint { color: var(--stamp); }
+.kyora-nav { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-bottom: 1rem; }
+.kyora-row { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; margin-top: 0.75rem; }
+.kyora-grow { flex: 1 1 16rem; min-width: 0; }
+.kyora-id { color: var(--stamp); white-space: nowrap; }
+.kyora-text {
+  margin: 0.4rem 0 0; font-size: 0.85rem; line-height: 1.6; color: var(--slate);
+  white-space: pre-wrap; overflow-wrap: break-word;
+}
+.kyora-note { margin-top: 0.9rem; font-size: 0.7rem; color: var(--slate); }
+.kyora-children { list-style: none; margin: 0.6rem 0 0; padding-left: 0.9rem; border-left: 1px solid var(--rule); }
+.kyora-children li { padding: 0.45rem 0; font-size: 0.85rem; }
+.kyora-mapping { border-left: 2px solid var(--stamp); padding: 0.5rem 0 0.5rem 0.8rem; margin-top: 0.7rem; }
+.kyora-mapping__head { display: flex; flex-wrap: wrap; gap: 0.4rem 0.9rem; align-items: baseline; font-size: 0.85rem; }
+.kyora-mapping__fw, .kyora-mapping__meta { font-size: 0.72rem; color: var(--slate); }
+.kyora-mapping__meta { margin-top: 0.25rem; }
+.kyora-gap-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: 1rem; margin-top: 1rem; }

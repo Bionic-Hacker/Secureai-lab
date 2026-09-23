@@ -6,7 +6,8 @@ from pathlib import Path
 from typing import Optional
 
 import clamd
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import Path as PathParam  # pathlib.Path is already imported above
 from redis.asyncio import Redis
 from sqlalchemy import desc, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -472,3 +473,92 @@ async def list_kyora_frameworks():
         return await kyora_service.list_frameworks()
     except kyora_service.KyoraServiceError as e:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e))
+
+
+# --- Kyora IQ drill-downs --------------------------------------------------
+# Same role boundary as every other governance route. Every identifier is
+# validated here before it's forwarded to a third-party server, and result
+# sizes are capped - one request can't pull all ~1,560 controls at once.
+_KYORA_ID = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+_KYORA_LAYER = r"^[a-z][a-z-]{0,31}$"
+
+
+def _kyora_http_error(e: kyora_service.KyoraServiceError) -> HTTPException:
+    return HTTPException(e.status_code, e.message)
+
+
+@router.get(
+    "/kyora/controls/search",
+    dependencies=[Depends(require_roles(*_GOVERNANCE_ROLES))],
+)
+async def search_kyora_controls(
+    q: str = Query(..., min_length=2, max_length=200),
+    framework: Optional[str] = Query(None, pattern=_KYORA_ID),
+    layer: Optional[str] = Query(None, pattern=_KYORA_LAYER),
+    limit: int = Query(25, ge=1, le=50),
+):
+    query = q.strip()
+    if len(query) < 2:
+        raise HTTPException(422, "Search query must be at least 2 characters.")
+    try:
+        return await kyora_service.search_controls(
+            query, framework=framework or "", layer=layer or "", limit=limit
+        )
+    except kyora_service.KyoraServiceError as e:
+        raise _kyora_http_error(e)
+
+
+@router.get(
+    "/kyora/frameworks/{framework}/controls/{control_id}",
+    dependencies=[Depends(require_roles(*_GOVERNANCE_ROLES))],
+)
+async def get_kyora_control(
+    framework: str = PathParam(..., pattern=_KYORA_ID),
+    control_id: str = PathParam(..., pattern=_KYORA_ID),
+):
+    try:
+        return await kyora_service.get_control(framework, control_id)
+    except kyora_service.KyoraServiceError as e:
+        raise _kyora_http_error(e)
+
+
+@router.get(
+    "/kyora/risks",
+    dependencies=[Depends(require_roles(*_GOVERNANCE_ROLES))],
+)
+async def list_kyora_risks(layer: Optional[str] = Query(None, pattern=_KYORA_LAYER)):
+    try:
+        return await kyora_service.list_risks(layer)
+    except kyora_service.KyoraServiceError as e:
+        raise _kyora_http_error(e)
+
+
+@router.get(
+    "/kyora/risks/{risk_id}",
+    dependencies=[Depends(require_roles(*_GOVERNANCE_ROLES))],
+)
+async def get_kyora_risk(risk_id: str = PathParam(..., pattern=_KYORA_ID)):
+    try:
+        return await kyora_service.get_risk(risk_id)
+    except kyora_service.KyoraServiceError as e:
+        raise _kyora_http_error(e)
+
+
+@router.get(
+    "/kyora/gap",
+    dependencies=[Depends(require_roles(*_GOVERNANCE_ROLES))],
+)
+async def analyze_kyora_gap(
+    have: str = Query(..., pattern=_KYORA_ID),
+    want: str = Query(..., pattern=_KYORA_ID),
+):
+    """
+    Which controls of `want` are covered by an existing mapping from `have`.
+    Kyora IQ's own reference crosswalk - not a claim about this project.
+    """
+    if have == want:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Choose two different frameworks.")
+    try:
+        return await kyora_service.analyze_gap(have, want)
+    except kyora_service.KyoraServiceError as e:
+        raise _kyora_http_error(e)

@@ -263,3 +263,35 @@ export function listAIRequests({ limit = 50, offset = 0, feature, provider, bloc
   if (blocked !== undefined) params.set("blocked", blocked);
   return request(`/api/v1/governance/ai-requests?${params}`);
 }
+
+// --- Kyora IQ drill-downs (read-only external reference data) ---
+function kyoraQuery(params) {
+  const qs = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== "") qs.set(key, String(value));
+  }
+  const s = qs.toString();
+  return s ? `?${s}` : "";
+}
+
+export function searchKyoraControls({ q, framework, layer, limit } = {}) {
+  return request(`/api/v1/governance/kyora/controls/search${kyoraQuery({ q, framework, layer, limit })}`);
+}
+
+export function getKyoraControl(framework, controlId) {
+  return request(
+    `/api/v1/governance/kyora/frameworks/${encodeURIComponent(framework)}/controls/${encodeURIComponent(controlId)}`
+  );
+}
+
+export function listKyoraRisks(layer) {
+  return request(`/api/v1/governance/kyora/risks${kyoraQuery({ layer })}`);
+}
+
+export function getKyoraRisk(riskId) {
+  return request(`/api/v1/governance/kyora/risks/${encodeURIComponent(riskId)}`);
+}
+
+export function analyzeKyoraGap(have, want) {
+  return request(`/api/v1/governance/kyora/gap${kyoraQuery({ have, want })}`);
+}

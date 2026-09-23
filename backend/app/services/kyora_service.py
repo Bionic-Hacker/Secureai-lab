@@ -31,6 +31,11 @@ settings = get_settings()
 class KyoraServiceError(Exception):
     """Raised when the Kyora IQ MCP server is unreachable or returns an error."""
 
+    def __init__(self, message: str, status_code: int = 502):
+        super().__init__(message)
+        self.message = message
+        self.status_code = status_code
+
 
 async def _call_tool(tool_name: str, arguments: dict) -> dict:
     if not settings.kyora_mcp_token:
@@ -47,38 +52,60 @@ async def _call_tool(tool_name: str, arguments: dict) -> dict:
     except Exception as exc:
         raise KyoraServiceError(f"Kyora IQ request failed: {exc}") from exc
 
-    if not result.content:
-        return {}
-
     # Tool results come back as text content; Kyora IQ's tools return
     # JSON-encoded text specifically (per their own quickstart example).
-    raw = result.content[0].text
+    raw = result.content[0].text if result.content else ""
+    return _interpret_result(bool(result.isError), raw)
+
+
+def _interpret_result(is_error: bool, raw: str) -> dict:
+    """
+    Kyora IQ fails in two shapes, and both used to reach callers as if they
+    were data (found by probing the live server before wiring these tools
+    to endpoints):
+      - protocol-level tool errors (isError=True), e.g. argument validation
+      - application-level refusals: {"ok": false, "error": "..."}, e.g. an
+        unknown control ID or an empty search query
+    """
+    if is_error:
+        raise KyoraServiceError(f"Kyora IQ tool error: {raw[:300]}")
+    if not raw:
+        return {}
     try:
-        return json.loads(raw)
+        data = json.loads(raw)
     except (json.JSONDecodeError, TypeError):
         # Not JSON - return as-is under a single key rather than
         # silently dropping content the caller might still want.
         return {"raw": raw}
+    if isinstance(data, dict) and data.get("ok") is False:
+        message = str(data.get("error") or "Kyora IQ rejected the request.")
+        # "no control 'x' in <framework>" / "no risk ..." -> not found
+        status_code = 404 if message.lower().startswith("no ") else 400
+        raise KyoraServiceError(message, status_code=status_code)
+    return data
 
 
 async def list_frameworks() -> dict:
     return await _call_tool("list_frameworks", {})
 
 
-async def search_controls(query: str) -> dict:
-    return await _call_tool("search_controls", {"query": query})
+async def search_controls(query: str, framework: str = "", layer: str = "", limit: int = 10) -> dict:
+    args: dict = {"query": query, "limit": limit}
+    if framework:
+        args["framework"] = framework
+    if layer:
+        args["layer"] = layer
+    return await _call_tool("search_controls", args)
 
 
-async def get_control(framework_id: str, control_id: str) -> dict:
-    return await _call_tool(
-        "get_control", {"framework_id": framework_id, "control_id": control_id}
-    )
+# The server's schema names this argument "framework", not "framework_id" -
+# the original client sent framework_id, so every call failed validation.
+async def get_control(framework: str, control_id: str) -> dict:
+    return await _call_tool("get_control", {"framework": framework, "control_id": control_id})
 
 
-async def get_mappings(framework_id: str, control_id: str) -> dict:
-    return await _call_tool(
-        "get_mappings", {"framework_id": framework_id, "control_id": control_id}
-    )
+async def get_mappings(framework: str, control_id: str) -> dict:
+    return await _call_tool("get_mappings", {"framework": framework, "control_id": control_id})
 
 
 async def list_risks(layer: str | None = None) -> dict:
