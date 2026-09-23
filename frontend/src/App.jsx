@@ -3,6 +3,7 @@ import { whoAmI, listDocuments, listRejectedUploads, deleteDocument, uploadDocum
 import IntakeSlot from "./components/IntakeSlot.jsx";
 import CustodyTag from "./components/CustodyTag.jsx";
 import Sidebar from "./components/Sidebar.jsx";
+import TopBar from "./components/TopBar.jsx";
 import LoginForm from "./components/LoginForm.jsx";
 import GovernanceView from "./components/governance/GovernanceView.jsx";
 import Overview from "./components/Overview.jsx";
@@ -223,6 +224,7 @@ export default function App() {
     <div className="shell">
       <Sidebar activeSection={activeSection} onSelect={setActiveSection} user={user} onLogout={handleLogout} />
       <main className="main-area">
+        <TopBar section={activeSection} user={user} />
         {activeSection === "overview" && (
           <div className="bench">
             <Overview />

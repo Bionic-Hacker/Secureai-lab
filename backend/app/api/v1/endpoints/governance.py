@@ -9,7 +9,7 @@ import clamd
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi import Path as PathParam  # pathlib.Path is already imported above
 from redis.asyncio import Redis
-from sqlalchemy import desc, select, text
+from sqlalchemy import desc, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -19,6 +19,7 @@ from app.models.ai_request import AIRequest
 from app.models.audit import AuditLog
 from app.models.code_finding import CodeFinding
 from app.models.document import Document
+from app.models.token import RefreshToken
 from app.models.user import User, UserRole
 from app.core.security import hash_password
 from app.schemas.governance import (
@@ -562,3 +563,29 @@ async def analyze_kyora_gap(
         return await kyora_service.analyze_gap(have, want)
     except kyora_service.KyoraServiceError as e:
         raise _kyora_http_error(e)
+
+@router.get(
+    "/active-sessions",
+    dependencies=[Depends(require_roles(*_GOVERNANCE_ROLES))],
+)
+async def get_active_sessions(db: AsyncSession = Depends(get_db)):
+    """
+    Live count of signed-in sessions, grouped by role. A session is a refresh
+    token that is still valid by the same rule as RefreshToken.is_valid()
+    (not revoked, not expired) and hasn't been superseded by rotation, so
+    each live refresh-token chain counts once. Counts sessions, not people:
+    one user signed in on two browsers is two sessions.
+    """
+    now = datetime.now(timezone.utc)
+    result = await db.execute(
+        select(User.role, func.count(RefreshToken.id))
+        .join(User, User.id == RefreshToken.user_id)
+        .where(
+            RefreshToken.revoked_at.is_(None),
+            RefreshToken.replaced_by.is_(None),
+            RefreshToken.expires_at > now,
+        )
+        .group_by(User.role)
+    )
+    by_role = {getattr(role, "value", str(role)): count for role, count in result.all()}
+    return {"total": sum(by_role.values()), "by_role": by_role, "checked_at": now}

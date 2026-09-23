@@ -295,3 +295,7 @@ export function getKyoraRisk(riskId) {
 export function analyzeKyoraGap(have, want) {
   return request(`/api/v1/governance/kyora/gap${kyoraQuery({ have, want })}`);
 }
+
+export function getActiveSessions() {
+  return request("/api/v1/governance/active-sessions");
+}

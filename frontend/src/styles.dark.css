@@ -1732,3 +1732,68 @@ code, .mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
 .kyora-mapping__fw, .kyora-mapping__meta { font-size: 0.72rem; color: var(--slate); }
 .kyora-mapping__meta { margin-top: 0.25rem; }
 .kyora-gap-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: 1rem; margin-top: 1rem; }
+
+/* ---------- Shell: top bar (mockup parity) ---------- */
+.topbar {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem 1rem;
+  padding: 0.85rem var(--gap);
+  background: color-mix(in srgb, var(--paper) 85%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--rule);
+}
+.topbar__title { font-family: "JetBrains Mono", monospace; font-weight: 700; font-size: 0.95rem; color: var(--ink); }
+.topbar__right { display: flex; align-items: center; flex-wrap: wrap; gap: 0.75rem; }
+.status-pill {
+  display: inline-flex; align-items: center; gap: 0.4rem; white-space: nowrap;
+  padding: 0.3rem 0.7rem; border-radius: 99px; border: 1px solid var(--rule); background: var(--card);
+  font-family: "JetBrains Mono", monospace; font-size: 0.66rem; font-weight: 600;
+  letter-spacing: 0.06em; text-transform: uppercase; color: var(--slate);
+}
+.status-pill__dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+.status-pill--ok { color: var(--clean); border-color: color-mix(in srgb, var(--clean) 40%, transparent); }
+.status-pill--ok .status-pill__dot { animation: status-pulse 2.2s ease-in-out infinite; }
+.status-pill--degraded { color: var(--flagged); border-color: color-mix(in srgb, var(--flagged) 40%, transparent); }
+@keyframes status-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--clean) 55%, transparent); opacity: 1; }
+  50% { box-shadow: 0 0 0 4px transparent; opacity: 0.6; }
+}
+@media (prefers-reduced-motion: reduce) { .status-pill--ok .status-pill__dot { animation: none; } }
+.session-chip { display: flex; align-items: center; gap: 0.45rem; font-size: 0.75rem; color: var(--slate); }
+.session-chip strong { color: var(--ink); font-weight: 600; }
+.session-chip__mfa--on { color: var(--clean); }
+.session-chip__mfa--off { color: var(--pending); }
+@media (max-width: 640px) { .session-chip__detail { display: none; } }
+
+/* ---------- Sidebar: brand mark, section label, icons, build status ---------- */
+.sidebar__logo {
+  width: 1.9rem; height: 1.9rem; flex: none; border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(155deg, var(--stamp) 0%, #8c6b2e 100%);
+  font-family: "JetBrains Mono", monospace; font-weight: 700; font-size: 0.9rem; color: var(--paper);
+}
+.sidebar__brand-sub {
+  display: block; margin-top: 0.15rem;
+  font-size: 0.6rem; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--slate);
+}
+.sidebar__section-label {
+  margin: 0.6rem 0.6rem 0.35rem;
+  font-family: "JetBrains Mono", monospace; font-size: 0.6rem; font-weight: 600;
+  letter-spacing: 0.1em; text-transform: uppercase; color: var(--slate); opacity: 0.8;
+}
+.sidebar__icon { flex: none; opacity: 0.85; }
+.sidebar__item--active .sidebar__icon { opacity: 1; }
+.sidebar__build { margin-top: auto; padding: 1rem 0.6rem 0.9rem; border-top: 1px solid var(--rule); }
+.sidebar__build-label {
+  font-family: "JetBrains Mono", monospace; font-size: 0.6rem; font-weight: 600;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--slate);
+}
+.sidebar__build-value { margin-top: 0.25rem; font-size: 0.78rem; font-weight: 600; color: var(--ink); }
+.sidebar__build-bar { height: 5px; margin-top: 0.5rem; border-radius: 3px; overflow: hidden; background: var(--card-raised); }
+.sidebar__build-bar span { display: block; width: 100%; height: 100%; background: linear-gradient(90deg, var(--clean), var(--stamp)); }
+.sidebar__build + .sidebar__account { margin-top: 0; }
+
+/* ---------- Operations Overview layout ---------- */
+.stat-grid--six { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.overview-grid--activity { grid-template-columns: 1.3fr 1fr; }
+@media (max-width: 900px) { .overview-grid--activity { grid-template-columns: 1fr; } }
