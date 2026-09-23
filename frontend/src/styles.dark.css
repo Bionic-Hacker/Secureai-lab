@@ -1693,3 +1693,17 @@ code, .mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
 /* Threat model list: entry count + date */
 .tm-list-item .mono { color: var(--slate); }
 .tm-table td:nth-child(3) { min-width: 8rem; }
+
+/* ---------- Assistant: retrieved sources ---------- */
+.chat-msg__sources { margin-top: 0.8rem; padding-top: 0.7rem; border-top: 1px solid var(--rule); }
+.chat-msg__sources-label {
+  font-size: 0.66rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--slate); margin-bottom: 0.25rem;
+}
+.chat-msg__source { border-left: 2px solid var(--stamp); padding: 0.35rem 0 0.35rem 0.75rem; margin-top: 0.5rem; }
+.chat-msg__source-doc { font-size: 0.72rem; color: var(--stamp); }
+.chat-msg__source-excerpt {
+  margin: 0.3rem 0 0; font-size: 0.8rem; line-height: 1.5;
+  color: var(--slate); white-space: pre-wrap;
+}
+.chat-msg--degraded { border-style: dashed; }

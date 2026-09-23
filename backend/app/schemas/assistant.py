@@ -14,10 +14,17 @@ class AssistantChatRequest(BaseModel):
     use_rag_context: bool = True
 
 
+class RetrievedSource(BaseModel):
+    document: str
+    excerpt: str
+
+
 class AssistantChatResponse(BaseModel):
     response: str
     guardrail_flags: list[str]
     blocked: bool
+    degraded: bool = False
+    sources: list[RetrievedSource] = Field(default_factory=list)
     model: str
     provider: str
     latency_ms: int

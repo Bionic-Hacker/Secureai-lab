@@ -6,8 +6,21 @@ function ChatMessage({ turn }) {
     return <div className="chat-msg chat-msg--system mono">{turn.content}</div>;
   }
   return (
-    <div className={`chat-msg chat-msg--${turn.role}`}>
+    <div className={`chat-msg chat-msg--${turn.role}${turn.degraded ? " chat-msg--degraded" : ""}`}>
       <div className="chat-msg__body">{turn.content}</div>
+      {turn.sources && turn.sources.length > 0 && (
+        <div className="chat-msg__sources">
+          <div className="chat-msg__sources-label mono">
+            {turn.degraded ? "Retrieved passages" : "Sources"}
+          </div>
+          {turn.sources.map((s, i) => (
+            <div key={i} className="chat-msg__source">
+              <span className="chat-msg__source-doc mono">{s.document}</span>
+              <p className="chat-msg__source-excerpt">{s.excerpt}</p>
+            </div>
+          ))}
+        </div>
+      )}
       {turn.guardrailFlags && turn.guardrailFlags.length > 0 && (
         <div className="chat-msg__flags">
           {turn.guardrailFlags.map((flag) => (
@@ -71,7 +84,11 @@ export default function Assistant() {
             role: "assistant",
             content: result.response,
             guardrailFlags: result.guardrail_flags,
-            meta: `${result.provider} · ${result.model} · ${result.latency_ms}ms`,
+            sources: result.sources,
+            degraded: result.degraded,
+            meta: result.degraded
+              ? `retrieval only · model unavailable · ${result.latency_ms}ms`
+              : `${result.provider} · ${result.model} · ${result.latency_ms}ms`,
           },
         ]);
       }

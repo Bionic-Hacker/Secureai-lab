@@ -38,23 +38,48 @@ class AssistantError(Exception):
         super().__init__(message)
 
 
-async def _get_rag_context(db: AsyncSession, user: User, query: str) -> str:
+_EXCERPT_CHARS = 400
+
+
+def _document_name(doc) -> str:
+    for attr in ("original_filename", "filename", "name", "title"):
+        value = getattr(doc, attr, None)
+        if value:
+            return str(value)
+    return str(doc.id)
+
+
+async def _get_rag_context(db: AsyncSession, user: User, query: str) -> tuple[str, list[dict]]:
+    # Returns (context block for the model, sources for the caller). Sources
+    # come from the same permission-scoped retrieval as the context, so
+    # showing them exposes nothing beyond documents the user can already read.
     accessible_docs = await document_service.list_documents(db, user, limit=1000, offset=0)
-    accessible_ids = [d.id for d in accessible_docs if d.ingestion_status == "indexed"]
-    if not accessible_ids:
-        return ""
+    indexed = [d for d in accessible_docs if d.ingestion_status == "indexed"]
+    if not indexed:
+        return "", []
 
     try:
         [query_vector] = await embeddings.embed_texts([query])
     except Exception:
-        return ""  # RAG context is an enhancement, not a hard dependency — chat still works without it
+        return "", []  # RAG context is an enhancement, not a hard dependency — chat still works without it
 
-    chunks = vector_store.query_chunks(query_embedding=query_vector, allowed_document_ids=accessible_ids, top_k=3)
+    chunks = vector_store.query_chunks(
+        query_embedding=query_vector, allowed_document_ids=[d.id for d in indexed], top_k=3
+    )
     if not chunks:
-        return ""
+        return "", []
+
+    names = {str(d.id): _document_name(d) for d in indexed}
+    sources = []
+    for c in chunks:
+        doc_id = c.get("document_id") or (c.get("metadata") or {}).get("document_id")
+        # Retrieved text now reaches the user directly, so it passes the same
+        # output guardrail as model responses before leaving the server.
+        excerpt, _ = guardrails.redact_output(c["text"][:_EXCERPT_CHARS])
+        sources.append({"document": names.get(str(doc_id), "document"), "excerpt": excerpt})
 
     joined = "\n\n---\n\n".join(c["text"] for c in chunks)
-    return f"Relevant context from your documents:\n\n{joined}"
+    return f"Relevant context from your documents:\n\n{joined}", sources
 
 
 async def handle_chat(
@@ -84,9 +109,9 @@ async def handle_chat(
             "latency_ms": latency_ms,
         }
 
-    context = ""
+    context, sources = "", []
     if use_rag_context and settings.assistant_use_rag_context:
-        context = await _get_rag_context(db, user, message)
+        context, sources = await _get_rag_context(db, user, message)
 
     messages = [ChatMessage("system", _SYSTEM_PROMPT)]
     if context:
@@ -98,7 +123,7 @@ async def handle_chat(
     try:
         raw_response = await chat.generate(messages)
     except chat.ChatError as exc:
-        raise AssistantError(str(exc)) from exc
+        return await _retrieval_only_response(db, user, message, sources, start, str(exc))
 
     redacted_response, output_flags = guardrails.redact_output(raw_response)
     redacted_prompt, _ = guardrails.redact_output(message)
@@ -117,6 +142,48 @@ async def handle_chat(
         "guardrail_flags": output_flags,
         "blocked": False,
         "model": settings.local_llm_model if settings.ai_provider == "local" else settings.openai_model,
+        "provider": settings.ai_provider,
+        "latency_ms": latency_ms,
+        "sources": sources,
+    }
+
+
+async def _retrieval_only_response(
+    db: AsyncSession, user: User, message: str, sources: list[dict], start: float, reason: str
+) -> dict:
+    # The chat model is unreachable (in production, Ollama only exists in the
+    # local Docker Compose stack). Retrieval already ran, permission-scoped,
+    # so return what it found instead of a bare 502 - clearly labelled as
+    # degraded and never presented as a model answer.
+    if sources:
+        response = (
+            "The chat model isn't available in this deployment, so no answer was generated. "
+            "Retrieval still ran against your documents - these are the passages the model "
+            "would have been given as context:"
+        )
+    else:
+        response = (
+            "The chat model isn't available in this deployment, so no answer was generated, "
+            "and retrieval found no relevant passages in documents you have access to."
+        )
+    flags = ["model_unavailable"]
+    redacted_prompt, _ = guardrails.redact_output(message)
+    latency_ms = int((time.monotonic() - start) * 1000)
+    model = settings.local_llm_model if settings.ai_provider == "local" else settings.openai_model
+
+    await _log_request(
+        db, user, feature="security_assistant", provider=settings.ai_provider, model=model,
+        prompt_redacted=redacted_prompt, response_redacted=f"[retrieval-only: {reason[:200]}]",
+        guardrail_flags=flags, blocked=False, latency_ms=latency_ms,
+    )
+
+    return {
+        "response": response,
+        "guardrail_flags": flags,
+        "blocked": False,
+        "degraded": True,
+        "sources": sources,
+        "model": model,
         "provider": settings.ai_provider,
         "latency_ms": latency_ms,
     }
