@@ -1650,3 +1650,46 @@ code, .mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
   opacity: 1;
 }
 
+/* ---------- Threat Modeling: STRIDE table ---------- */
+.overview-panel--flush { padding: 0; overflow: hidden; }
+.tm-table-wrap { overflow-x: auto; }
+.tm-table { width: 100%; min-width: 760px; border-collapse: collapse; font-size: 0.8rem; }
+.tm-table th {
+  text-align: left; white-space: nowrap;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.66rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.05em;
+  color: color-mix(in srgb, var(--slate) 75%, var(--paper));
+  padding: 0.7rem 0.9rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--rule) 75%, var(--slate));
+}
+.tm-table td {
+  padding: 0.65rem 0.9rem; vertical-align: top; line-height: 1.5;
+  color: var(--slate);
+  border-bottom: 1px solid var(--rule);
+  overflow-wrap: break-word;
+}
+.tm-table tbody tr:last-child td { border-bottom: none; }
+.tm-table tbody tr:hover td { background: var(--card-raised); }
+.tm-table__category {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  color: var(--ink); white-space: nowrap;
+}
+.tm-table__flag { margin-left: 0.5rem; }
+.tm-table__actions { width: 1%; text-align: right; }
+
+.tm-status {
+  appearance: none; border: none; border-radius: 99px; cursor: pointer;
+  padding: 0.2rem 0.7rem;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.66rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.03em;
+}
+.tm-status--mitigated     { color: var(--clean);   background: color-mix(in srgb, var(--clean) 14%, transparent); }
+.tm-status--planned       { color: var(--pending); background: color-mix(in srgb, var(--pending) 14%, transparent); }
+.tm-status--accepted_risk { color: #5fa8d3;        background: rgba(95, 168, 211, 0.14); }
+.tm-status option { background: var(--card); color: var(--ink); text-transform: none; }
+
+/* Threat model list: entry count + date */
+.tm-list-item .mono { color: var(--slate); }
+.tm-table td:nth-child(3) { min-width: 8rem; }

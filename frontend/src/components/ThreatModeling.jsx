@@ -17,6 +17,8 @@ const STRIDE_CATEGORIES = [
   { key: "dos", label: "DoS" },
   { key: "elevation", label: "Elevation of Privilege" },
 ];
+const STRIDE_ORDER = Object.fromEntries(STRIDE_CATEGORIES.map((c, i) => [c.key, i]));
+const STRIDE_LABEL = Object.fromEntries(STRIDE_CATEGORIES.map((c) => [c.key, c.label]));
 
 const MITIGATION_STATUSES = ["mitigated", "planned", "accepted_risk"];
 
@@ -155,6 +157,14 @@ function ThreatModelDetail({ modelId, onBack, justCreated }) {
   if (state === "loading") return <p className="gov-loading">Loading threat model…</p>;
   if (state === "error") return <p className="gov-error">Couldn't load: {error}</p>;
 
+  const sortedEntries = [...model.entries].sort(
+    (a, b) =>
+      STRIDE_ORDER[a.stride_category] - STRIDE_ORDER[b.stride_category] ||
+      new Date(a.created_at) - new Date(b.created_at)
+  );
+
+  
+
   return (
     <div>
       <button type="button" className="btn btn--ghost" onClick={onBack} style={{ marginBottom: "1rem" }}>
@@ -187,24 +197,47 @@ function ThreatModelDetail({ modelId, onBack, justCreated }) {
         </div>
       )}
 
-      {STRIDE_CATEGORIES.map((cat) => {
-        const catEntries = model.entries.filter((e) => e.stride_category === cat.key);
-        // Only render a category once it actually has something in it -
-        // showing all six as empty panels on every model, forever, was
-        // pure clutter rather than useful structure.
-        if (catEntries.length === 0) return null;
-        return (
-          <div className="overview-panel" key={cat.key}>
-            <div className="overview-panel__title">{cat.label}</div>
-            {(
-              <div className="tm-entries">
-                {catEntries.map((entry) => (
-                  <div className="tm-entry" key={entry.id}>
-                    <div className="tm-entry__head">
-                      <span className="tm-entry__asset mono">{entry.affected_asset}</span>
+            {sortedEntries.length > 0 && (
+        <div className="overview-panel overview-panel--flush">
+          <div className="tm-table-wrap">
+            <table className="tm-table">
+              <thead>
+                <tr>
+                  <th>Category</th>
+                  <th>Threat</th>
+                  <th>Asset</th>
+                  <th>Mitigation</th>
+                  <th>Status</th>
+                  <th aria-label="Actions" />
+                </tr>
+              </thead>
+              <tbody>
+                {sortedEntries.map((entry) => (
+                  <tr key={entry.id}>
+                    <td className="tm-table__category">
+                      {STRIDE_LABEL[entry.stride_category] ?? entry.stride_category}
+                    </td>
+                    <td>
+                      {entry.threat_description}
                       {entry.ai_generated && !entry.human_edited && (
-                        <span className="flag-pill">AI-generated</span>
+                        <span className="flag-pill tm-table__flag">AI-generated</span>
                       )}
+                    </td>
+                    <td>{entry.affected_asset}</td>
+                    <td>{entry.mitigation}</td>
+                    <td>
+                      <select
+                        className={`tm-status tm-status--${entry.mitigation_status}`}
+                        value={entry.mitigation_status}
+                        aria-label="Mitigation status"
+                        onChange={(e) => handleStatusChange(entry.id, e.target.value)}
+                      >
+                        {MITIGATION_STATUSES.map((s) => (
+                          <option key={s} value={s}>{s.replace("_", " ")}</option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="tm-table__actions">
                       <button
                         type="button"
                         className="tm-entry__delete"
@@ -212,7 +245,7 @@ function ThreatModelDetail({ modelId, onBack, justCreated }) {
                         title="Delete entry"
                         onClick={() => handleDeleteEntry(entry.id)}
                       >
-                        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="2.75" strokeLinecap="round" strokeLinejoin="round">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round">
                           <polyline points="3 6 5 6 21 6" />
                           <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
                           <path d="M10 11v6" />
@@ -220,27 +253,14 @@ function ThreatModelDetail({ modelId, onBack, justCreated }) {
                           <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
                         </svg>
                       </button>
-                    </div>
-                    <p className="tm-entry__desc">{entry.threat_description}</p>
-                    <p className="tm-entry__mitigation">
-                      <span className="tm-entry__label">Mitigation:</span> {entry.mitigation}
-                    </p>
-                    <select
-                      className="sort-select"
-                      value={entry.mitigation_status}
-                      onChange={(e) => handleStatusChange(entry.id, e.target.value)}
-                    >
-                      {MITIGATION_STATUSES.map((s) => (
-                        <option key={s} value={s}>{s.replace("_", " ")}</option>
-                      ))}
-                    </select>
-                  </div>
+                    </td>
+                  </tr>
                 ))}
-              </div>
-            )}
+              </tbody>
+            </table>
           </div>
-        );
-      })}
+        </div>
+      )}
 
       <div className="overview-panel" ref={addEntryRef}>
         <div className="overview-panel__title">Add Entry</div>
