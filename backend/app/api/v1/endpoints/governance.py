@@ -589,3 +589,61 @@ async def get_active_sessions(db: AsyncSession = Depends(get_db)):
     )
     by_role = {getattr(role, "value", str(role)): count for role, count in result.all()}
     return {"total": sum(by_role.values()), "by_role": by_role, "checked_at": now}
+
+# --- External services -------------------------------------------------------
+# Optional third-party dependencies, reported separately from the core
+# service-health check above and never counted toward overall system status:
+# if Kyora IQ is down, only the Compliance Reference tab is affected. Kyora
+# runs on a free tier that sleeps when idle, so the check has a short timeout,
+# reports a slow wake-up as "timeout" rather than "unreachable", and caches
+# the result so page loads don't open a new MCP session every time.
+_EXTERNAL_TIMEOUT_S = 8
+_EXTERNAL_CACHE_OK_S = 300
+_EXTERNAL_CACHE_FAIL_S = 60
+_external_health_cache: dict = {"expires": 0.0, "components": None, "checked_at": None}
+
+
+async def _check_kyora() -> dict:
+    import asyncio
+
+    name = "kyora-iq-mcp"
+    if not _health_settings.kyora_mcp_token:
+        return {"name": name, "status": "not_configured", "latency_ms": None, "detail": "KYORA_MCP_TOKEN is not set."}
+    start = time.monotonic()
+    try:
+        await asyncio.wait_for(kyora_service.list_frameworks(), timeout=_EXTERNAL_TIMEOUT_S)
+    except asyncio.TimeoutError:
+        return {
+            "name": name,
+            "status": "timeout",
+            "latency_ms": None,
+            "detail": f"No response within {_EXTERNAL_TIMEOUT_S}s - usually a free-tier cold start.",
+        }
+    except Exception as exc:
+        return {"name": name, "status": "unreachable", "latency_ms": None, "detail": str(exc)[:200]}
+    return {
+        "name": name,
+        "status": "healthy",
+        "latency_ms": round((time.monotonic() - start) * 1000, 1),
+        "detail": None,
+    }
+
+
+@router.get(
+    "/external-health",
+    dependencies=[Depends(require_roles(*_GOVERNANCE_ROLES))],
+)
+async def get_external_health():
+    now = time.monotonic()
+    cache = _external_health_cache
+    if cache["components"] is None or now >= cache["expires"]:
+        kyora = await _check_kyora()
+        cache["components"] = [kyora]
+        cache["checked_at"] = datetime.now(timezone.utc)
+        ttl = _EXTERNAL_CACHE_OK_S if kyora["status"] == "healthy" else _EXTERNAL_CACHE_FAIL_S
+        cache["expires"] = now + ttl
+    return {
+        "checked_at": cache["checked_at"],
+        "cached_for_s": max(0, round(cache["expires"] - now)),
+        "components": cache["components"],
+    }

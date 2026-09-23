@@ -299,3 +299,7 @@ export function analyzeKyoraGap(have, want) {
 export function getActiveSessions() {
   return request("/api/v1/governance/active-sessions");
 }
+
+export function getExternalHealth() {
+  return request("/api/v1/governance/external-health");
+}

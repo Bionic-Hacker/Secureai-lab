@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   getActiveSessions,
+  getExternalHealth,
   getFrameworkCoverage,
   getServiceHealth,
   listAIRequests,
@@ -27,6 +28,13 @@ const ATLAS_BUCKETS = [
 ];
 
 const ROLE_ORDER = ["administrator", "security_engineer", "developer"];
+
+const EXTERNAL_STATUS_LABELS = {
+  healthy: "healthy",
+  timeout: "cold start / timed out",
+  unreachable: "unreachable",
+  not_configured: "not configured",
+};
 
 function formatTime(iso) {
   const d = new Date(iso);
@@ -74,6 +82,23 @@ export default function Overview() {
   const [coverage, setCoverage] = useState(null);
   const [health, setHealth] = useState(null);
   const [sessions, setSessions] = useState(null);
+  const [external, setExternal] = useState({ status: "loading" });
+
+  // Loaded separately from everything else: a sleeping free-tier dependency
+  // can take several seconds to answer, and it shouldn't hold up the page.
+  useEffect(() => {
+    let cancelled = false;
+    getExternalHealth()
+      .then((data) => {
+        if (!cancelled) setExternal({ status: "ready", data });
+      })
+      .catch((err) => {
+        if (!cancelled) setExternal({ status: err.status === 403 ? "hidden" : "error", error: err });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const load = useCallback(async () => {
     setState("loading");
@@ -290,6 +315,32 @@ export default function Overview() {
             </div>
           ) : (
             <p className="gov-empty">{GOV_ONLY}.</p>
+          )}
+          {external.status !== "hidden" && (
+            <div className="health-external">
+              <div className="health-external__title">External Services</div>
+              <p className="overview-panel__desc">Optional third-party dependencies, not counted in system status.</p>
+              {external.status === "loading" && <p className="gov-loading">Checking…</p>}
+              {external.status === "error" && (
+                <p className="gov-error">Couldn&apos;t check external services: {external.error?.message}</p>
+              )}
+              {external.status === "ready" && (
+                <div className="health-list">
+                  {(external.data?.components ?? []).map((c) => (
+                    <div className="health-row" key={c.name} title={c.detail || undefined}>
+                      <span className="health-row__name mono">
+                        <span className={`health-dot health-dot--${c.status}`} />
+                        {c.name}
+                      </span>
+                      <span className={`health-row__status health-row__status--${c.status}`}>
+                        {EXTERNAL_STATUS_LABELS[c.status] ?? c.status}
+                        {c.latency_ms != null ? ` · ${c.latency_ms}ms` : ""}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>

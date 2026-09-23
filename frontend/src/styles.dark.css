@@ -1797,3 +1797,13 @@ code, .mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
 .stat-grid--six { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
 .overview-grid--activity { grid-template-columns: 1.3fr 1fr; }
 @media (max-width: 900px) { .overview-grid--activity { grid-template-columns: 1fr; } }
+
+/* ---------- Service Health: external services ---------- */
+.health-external { margin-top: 1.1rem; padding-top: 0.9rem; border-top: 1px dashed var(--rule); }
+.health-external__title {
+  font-family: "JetBrains Mono", monospace; font-size: 0.66rem; font-weight: 600;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--slate);
+}
+.health-external .overview-panel__desc { margin-top: 0.2rem; font-size: 0.72rem; }
+.health-dot--timeout, .health-dot--not_configured { background: var(--pending); }
+.health-row__status--timeout, .health-row__status--not_configured { color: var(--pending); }
