@@ -11,15 +11,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-# --extra-index-url points pip at PyTorch's CPU-only wheel index IN ADDITION
-# to normal PyPI — torch resolves from there (a few hundred MB, no CUDA),
-# everything else resolves from PyPI as usual. Without this, sentence-
-# transformers' torch dependency pulls the ~2GB GPU build by default, which
-# this project has no use for (no GPU in this Docker setup) and would
-# roughly triple the image size for nothing.
+# PyTorch is no longer a dependency: local embeddings run on ONNX Runtime
+# (see app/services/embeddings/local_provider.py), so the CPU-only torch
+# wheel index this step used to need is gone.
 RUN pip install --no-cache-dir --upgrade pip \
     && pip wheel --no-cache-dir --wheel-dir /build/wheels \
-       --extra-index-url https://download.pytorch.org/whl/cpu \
        -r requirements.txt
 
 # ---- Runtime stage: minimal, non-root, no compilers ----
@@ -65,15 +61,15 @@ RUN mkdir -p /app/.cache/huggingface && chown -R secureai:secureai /app/.cache
 
 USER secureai
 
-# Pre-download the local embedding model's weights at build time, so a
-# freshly-started container never needs internet access to fetch them and
-# the first real ingestion request isn't slowed down by a cold download.
-# This hardcodes the model name rather than reading LOCAL_EMBEDDING_MODEL
-# from .env (Docker build args would be needed for that) — if you change
-# that setting to a different model, update this line to match, or accept
-# a one-time runtime download as a fallback (local_provider.py handles
-# that gracefully either way).
-RUN python3 -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('BAAI/bge-small-en-v1.5')"
+# Pre-download the local embedding model's ONNX weights and tokenizer at
+# build time, so a running container never fetches anything: HF_HUB_OFFLINE
+# below makes that a guarantee rather than a hope (the local container's
+# filesystem is read-only, and on Render a runtime download would repeat on
+# every restart). This hardcodes the model name rather than reading
+# LOCAL_EMBEDDING_MODEL from .env - if you change that setting, update this
+# line to match.
+RUN python3 -c "from huggingface_hub import hf_hub_download; [hf_hub_download('BAAI/bge-small-en-v1.5', f) for f in ('onnx/model.onnx', 'tokenizer.json')]"
+ENV HF_HUB_OFFLINE=1
 
 EXPOSE 8000
 
