@@ -93,6 +93,16 @@ def sanitize_filename(raw_name: str) -> tuple[str, str]:
     return name, ext
 
 
+# application/* labels libmagic uses for content that is still plain text.
+# Only consulted for source-code/plaintext extensions - never for PDF/DOCX.
+PLAINTEXT_APPLICATION_TYPES = {
+    "application/javascript",
+    "application/x-javascript",
+    "application/ecmascript",
+    "application/json",
+}
+
+
 def validate_content_type(data: bytes, ext: str) -> str:
     """Returns the detected MIME type, or raises DocumentError on mismatch."""
     try:
@@ -111,7 +121,12 @@ def validate_content_type(data: bytes, ext: str) -> str:
         # libmagic's language guesses for source code are inconsistent
         # and plaintext can't carry the kind of embedded-object exploits
         # that make strict matching necessary for PDF/DOCX.
-        if not detected.startswith("text/"):
+        #
+        # libmagic also labels some plaintext scripts with an application/*
+        # type - notably JavaScript (a Python file that is mostly embedded
+        # JS/JSX text gets "application/javascript"). Those are still plain
+        # text, so they're accepted; anything genuinely binary still isn't.
+        if not (detected.startswith("text/") or detected in PLAINTEXT_APPLICATION_TYPES):
             raise DocumentError(f"File content does not match its extension (detected {detected}).")
 
     return detected
