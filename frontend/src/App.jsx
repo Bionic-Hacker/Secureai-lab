@@ -12,6 +12,22 @@ import ThreatModeling from "./components/ThreatModeling.jsx";
 import CodeReview from "./components/CodeReview.jsx";
 
 const PENDING = new Set(["pending", "scanning", "in_progress"]);
+const INGESTION_PENDING = new Set(["pending", "queued", "processing", "in_progress"]);
+// Only recent uploads are worth polling for. A document stuck in "processing"
+// for longer (its indexing task died, e.g. in a restart) would otherwise keep
+// the page polling every 4 seconds forever.
+const POLL_WINDOW_MS = 15 * 60 * 1000;
+
+// True while the server is still working on a document: malware scan,
+// indexing, or a code scan. Rejected uploads come from the audit trail and
+// never change, so they never keep the poll alive.
+function stillWorking(d) {
+  if (d._rejected) return false;
+  if (PENDING.has(d.malware_scan_status)) return true;
+  const created = new Date(d.created_at).getTime();
+  const recent = Number.isFinite(created) && Date.now() - created < POLL_WINDOW_MS;
+  return recent && (INGESTION_PENDING.has(d.ingestion_status) || d.code_scan_status === "scanning");
+}
 
 const FILTERS = [
   { key: "all", label: "All" },
@@ -107,9 +123,12 @@ export default function App() {
     });
   }, []);
 
-  // Scanning happens out of band, so poll while anything is still pending.
+  // Malware scanning, indexing and code scans all happen out of band, so poll
+  // while any recent document is still being worked on. Previously only the
+  // malware scan was watched, so "processing" -> "indexed" only showed after a
+  // manual page refresh.
   useEffect(() => {
-    const waiting = docs.some((d) => PENDING.has(d.malware_scan_status));
+    const waiting = docs.some(stillWorking);
     clearInterval(pollRef.current);
     if (phase === "ready" && waiting) {
       pollRef.current = setInterval(() => refresh().catch(() => {}), 4000);
