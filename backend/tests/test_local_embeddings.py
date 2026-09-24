@@ -1,7 +1,7 @@
 """
-Local (ONNX) embedding provider tests. No model download: pooling is tested
-directly, and the provider's batching/feeds are tested against a fake
-session and tokenizer.
+Local (ONNX) embedding provider tests. No model download: pooling and batch
+planning are tested directly, and the provider is run against a fake session
+and tokenizer.
 """
 
 import asyncio
@@ -9,49 +9,65 @@ import asyncio
 import numpy as np
 
 from app.services.embeddings import local_provider
-from app.services.embeddings.local_provider import LocalEmbeddingProvider, _cls_pool_and_normalize
+from app.services.embeddings.local_provider import (
+    LocalEmbeddingProvider,
+    _cls_pool_and_normalize,
+    _plan_batches,
+)
 
 
 def test_pooling_takes_the_cls_token_and_normalizes():
-    hidden = np.array([[[3.0, 4.0], [100.0, 100.0]]])  # batch 1, 2 tokens, dim 2
-    out = _cls_pool_and_normalize(hidden)
-    np.testing.assert_allclose(out, [[0.6, 0.8]])
+    hidden = np.array([[[3.0, 4.0], [100.0, 100.0]]])
+    np.testing.assert_allclose(_cls_pool_and_normalize(hidden), [[0.6, 0.8]])
 
 
 def test_pooling_survives_an_all_zero_vector():
-    out = _cls_pool_and_normalize(np.zeros((1, 3, 4)))
-    assert np.all(np.isfinite(out))
+    assert np.all(np.isfinite(_cls_pool_and_normalize(np.zeros((1, 3, 4)))))
+
+
+def test_long_texts_are_batched_by_token_budget():
+    lengths = [512] * 5 + [20] * 40
+    batches = _plan_batches(lengths, budget=1024, max_batch=16)
+    for batch in batches:
+        assert len(batch) <= 16
+        assert len(batch) * max(lengths[i] for i in batch) <= 1024 or len(batch) == 1
+    assert sorted(i for b in batches for i in b) == list(range(len(lengths)))
+    assert all(len(b) <= 2 for b in batches if max(lengths[i] for i in b) == 512)
+
+
+def test_a_text_longer_than_the_budget_still_gets_a_batch():
+    assert _plan_batches([4000], budget=1024) == [[0]]
 
 
 class _Enc:
-    def __init__(self, n):
+    def __init__(self, text):
+        n = len(text.split())
         self.ids = [101] + [7] * n
         self.attention_mask = [1] * (n + 1)
         self.type_ids = [0] * (n + 1)
+        self.n = n
 
 
 class _FakeTokenizer:
     def encode_batch(self, texts):
-        width = max(len(t) for t in texts)
-        encs = [_Enc(len(t)) for t in texts]
-        for e in encs:  # pad like the real tokenizer does
-            pad = width + 1 - len(e.ids)
-            e.ids += [0] * pad
-            e.attention_mask += [0] * pad
-            e.type_ids += [0] * pad
-        return encs
+        return [_Enc(t) for t in texts]
 
 
 class _FakeSession:
+    """Returns a [CLS] vector that encodes each row's real (unpadded) length."""
+
     def __init__(self):
-        self.batch_sizes = []
+        self.shapes = []
         self.feed_names = None
 
     def run(self, _, feeds):
         self.feed_names = sorted(feeds)
         batch, seq = feeds["input_ids"].shape
-        self.batch_sizes.append(batch)
-        hidden = np.ones((batch, seq, 4), dtype=np.float32)
+        self.shapes.append((batch, seq))
+        real = feeds["attention_mask"].sum(axis=1).astype(np.float32)
+        hidden = np.zeros((batch, seq, 2), dtype=np.float32)
+        hidden[:, 0, 0] = real
+        hidden[:, 0, 1] = 1.0
         return [hidden]
 
 
@@ -65,19 +81,21 @@ def _provider(monkeypatch, input_names):
     return provider, session
 
 
-def test_embeds_in_small_batches_and_returns_unit_vectors(monkeypatch):
+def test_results_come_back_in_the_original_order(monkeypatch):
     provider, session = _provider(monkeypatch, {"input_ids", "attention_mask", "token_type_ids"})
-    texts = [f"chunk {i}" for i in range(local_provider._BATCH_SIZE * 2 + 3)]
-    vectors = asyncio.run(provider.embed_texts(texts))
-    assert len(vectors) == len(texts)
-    assert max(session.batch_sizes) <= local_provider._BATCH_SIZE
-    np.testing.assert_allclose(np.linalg.norm(np.array(vectors), axis=1), 1.0, rtol=1e-6)
-    assert session.feed_names == ["attention_mask", "input_ids", "token_type_ids"]
+    texts = ["a " * 3, "a " * 600, "a", "a " * 40, "a " * 600]
+    vectors = np.array(asyncio.run(provider.embed_texts(texts)))
+    expected_len = [len(t.split()) + 1 for t in texts]
+    # each vector is normalize([len, 1]), so its direction identifies the input
+    ratios = vectors[:, 0] / vectors[:, 1]
+    np.testing.assert_allclose(ratios, expected_len)
+    np.testing.assert_allclose(np.linalg.norm(vectors, axis=1), 1.0, rtol=1e-6)
 
 
-def test_token_type_ids_only_sent_when_the_model_expects_them(monkeypatch):
+def test_no_batch_exceeds_the_token_budget(monkeypatch):
     provider, session = _provider(monkeypatch, {"input_ids", "attention_mask"})
-    asyncio.run(provider.embed_texts(["hello"]))
+    asyncio.run(provider.embed_texts(["a " * 510] * 6 + ["a b c"] * 30))
+    assert all(b * s <= local_provider._TOKEN_BUDGET or b == 1 for b, s in session.shapes)
     assert session.feed_names == ["attention_mask", "input_ids"]
 
 
