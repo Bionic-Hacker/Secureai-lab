@@ -303,3 +303,13 @@ export function getActiveSessions() {
 export function getExternalHealth() {
   return request("/api/v1/governance/external-health");
 }
+
+export function listCodeFindings({ limit = 200 } = {}) {
+  return request(`/api/v1/code-review/findings?limit=${encodeURIComponent(limit)}`);
+}
+
+export function getFindingExcerpt(findingId, context = 6) {
+  return request(
+    `/api/v1/code-review/findings/${encodeURIComponent(findingId)}/excerpt?context=${encodeURIComponent(context)}`
+  );
+}

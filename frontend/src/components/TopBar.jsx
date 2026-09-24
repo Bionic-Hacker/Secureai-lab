@@ -5,6 +5,7 @@ const SECTION_TITLES = {
   overview: "Operations Overview",
   assistant: "AI Security Assistant",
   intake: "Document Vault",
+  codereview: "Code Review Engine",
   threatmodel: "Threat Modeling",
   governance: "Governance",
 };

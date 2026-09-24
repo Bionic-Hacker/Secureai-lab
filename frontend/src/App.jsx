@@ -9,6 +9,7 @@ import GovernanceView from "./components/governance/GovernanceView.jsx";
 import Overview from "./components/Overview.jsx";
 import Assistant from "./components/Assistant.jsx";
 import ThreatModeling from "./components/ThreatModeling.jsx";
+import CodeReview from "./components/CodeReview.jsx";
 
 const PENDING = new Set(["pending", "scanning", "in_progress"]);
 
@@ -217,9 +218,6 @@ export default function App() {
     );
   }
 
-  const clean = docs.filter((d) => d.malware_scan_status === "clean").length;
-  const waiting = docs.filter((d) => PENDING.has(d.malware_scan_status)).length;
-
   return (
     <div className="shell">
       <Sidebar activeSection={activeSection} onSelect={setActiveSection} user={user} onLogout={handleLogout} />
@@ -237,6 +235,12 @@ export default function App() {
           </div>
         )}
 
+        {activeSection === "codereview" && (
+          <div className="bench">
+            <CodeReview user={user} />
+          </div>
+        )}
+
         {activeSection === "threatmodel" && (
           <div className="bench">
             <ThreatModeling />
@@ -245,32 +249,14 @@ export default function App() {
 
         {activeSection === "intake" && (
           <div className="bench">
-            <header className="masthead">
-              <div className="masthead__mark">
-                <span className="masthead__rule" aria-hidden="true" />
-                <h1 className="masthead__title">Intake</h1>
+            <header className="gov-header vault-header">
+              <div>
+                <h1 className="gov-header__title">Document Vault — Secure RAG Pipeline</h1>
+                <p className="gov-header__sub">
+                  Uploads are scanned, sanitized, and embedded before they&apos;re ever retrievable. Retrieval is
+                  scoped per document permission, not per user role.
+                </p>
               </div>
-              <dl className="ledger">
-                <div className="ledger__cell">
-                  <dt>Held</dt>
-                  <dd>{String(docs.length).padStart(3, "0")}</dd>
-                </div>
-                <div className="ledger__cell">
-                  <dt>Cleared</dt>
-                  <dd>{String(clean).padStart(3, "0")}</dd>
-                </div>
-                <div className="ledger__cell">
-                  <dt>In scan</dt>
-                  <dd>{String(waiting).padStart(3, "0")}</dd>
-                </div>
-                <div className="ledger__cell ledger__cell--wide">
-                  <dt>Custodian</dt>
-                  <dd className="ledger__who">
-                    {user?.display_name}
-                    <span className="ledger__role">{user?.role?.replace("_", " ")}</span>
-                  </dd>
-                </div>
-              </dl>
             </header>
 
             <IntakeSlot onFiles={handleFiles} busy={busy} />
@@ -328,6 +314,12 @@ export default function App() {
                 ))
               )}
             </section>
+
+            <p className="vault-callout">
+              Retrieval is filtered against <code>document_permissions</code> before any context reaches the
+              model. A user&apos;s queries can only surface chunks from documents they own or were explicitly
+              shared, checked at retrieval time, not just at upload time.
+            </p>
           </div>
         )}
 

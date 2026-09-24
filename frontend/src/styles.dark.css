@@ -1807,3 +1807,49 @@ code, .mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
 .health-external .overview-panel__desc { margin-top: 0.2rem; font-size: 0.72rem; }
 .health-dot--timeout, .health-dot--not_configured { background: var(--pending); }
 .health-row__status--timeout, .health-row__status--not_configured { color: var(--pending); }
+
+/* ---------- Code Review Engine ---------- */
+.cr-detail__head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+.cr-muted { color: var(--slate); opacity: 0.8; }
+.cr-badge {
+  display: inline-block; padding: 0.15rem 0.6rem; border-radius: 99px; white-space: nowrap;
+  font-family: "JetBrains Mono", monospace; font-size: 0.64rem; font-weight: 600;
+  letter-spacing: 0.04em; text-transform: uppercase;
+}
+.cr-badge--critical { color: var(--flagged); background: color-mix(in srgb, var(--flagged) 14%, transparent); }
+.cr-badge--high { color: var(--pending); background: color-mix(in srgb, var(--pending) 14%, transparent); }
+.cr-badge--medium { color: var(--stamp); background: color-mix(in srgb, var(--stamp) 14%, transparent); }
+.cr-badge--low { color: #5fa8d3; background: rgba(95, 168, 211, 0.14); }
+.cr-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 1rem; margin-top: 1rem; }
+.cr-cards .stat-card { background: var(--card-raised); }
+.cr-code {
+  margin-top: 1rem; border: 1px solid var(--rule); border-radius: 6px; overflow-x: auto;
+  background: color-mix(in srgb, var(--paper) 70%, black); font-size: 0.78rem;
+}
+.cr-code__file { padding: 0.5rem 0.9rem; border-bottom: 1px solid var(--rule); color: var(--slate); font-size: 0.7rem; }
+.cr-code__line { display: flex; white-space: pre; line-height: 1.7; }
+.cr-code__num { flex: none; width: 3.2rem; padding-right: 0.8rem; text-align: right; color: var(--slate); opacity: 0.6; user-select: none; }
+.cr-code__text { padding-right: 1rem; color: var(--ink); }
+.cr-code__line--flagged { background: color-mix(in srgb, var(--flagged) 16%, transparent); box-shadow: inset 3px 0 0 var(--flagged); }
+.cr-code__line--flagged .cr-code__num { color: var(--flagged); opacity: 1; }
+.cr-remediation { margin: 1rem 0 0; font-size: 0.85rem; line-height: 1.6; color: var(--slate); }
+.cr-remediation strong { color: var(--stamp); }
+.cr-status {
+  display: inline-block; padding: 0.15rem 0.6rem; border-radius: 99px; background: var(--card-raised);
+  font-family: "JetBrains Mono", monospace; font-size: 0.64rem; text-transform: uppercase; color: var(--slate);
+}
+.cr-table tbody tr { cursor: pointer; }
+.cr-table tbody tr:focus-visible { outline: 2px solid var(--stamp); outline-offset: -2px; }
+.cr-table tbody tr.cr-row--selected td { background: color-mix(in srgb, var(--stamp) 8%, transparent); }
+
+/* ---------- Document Vault: header + retrieval callout ---------- */
+.vault-header { margin-bottom: 1.5rem; }
+.vault-callout {
+  margin: 1.5rem 0 0; padding: 0.85rem 1rem;
+  background: var(--card); border: 1px solid var(--rule); border-left: 3px solid var(--stamp); border-radius: 6px;
+  font-size: 0.8rem; line-height: 1.6; color: var(--slate);
+}
+.vault-callout code {
+  font-family: "JetBrains Mono", monospace; font-size: 0.75rem; color: var(--ink);
+  background: var(--paper); padding: 0.1rem 0.4rem; border-radius: 3px;
+}

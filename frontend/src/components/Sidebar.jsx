@@ -33,6 +33,12 @@ const ICONS = {
       <path d="M14 3.5v5h5" />
     </svg>
   ),
+  codereview: (
+    <svg {...ICON_PROPS}>
+      <path d="M12 3.5l7.5 3v6c0 5.2-3.6 8.3-7.5 9.2-3.9-.9-7.5-4-7.5-9.2v-6l7.5-3z" />
+      <path d="M8.7 12.2l2.2 2.2 4.4-4.4" />
+    </svg>
+  ),
   threatmodel: (
     <svg {...ICON_PROPS}>
       <path d="M12 4l9 15.5H3L12 4z" />
@@ -54,6 +60,7 @@ const NAV_ITEMS = [
   { key: "overview", label: "Overview" },
   { key: "assistant", label: "AI Security Assistant" },
   { key: "intake", label: "Document Vault" },
+  { key: "codereview", label: "Code Review Engine" },
   { key: "threatmodel", label: "Threat Modeling" },
   { key: "governance", label: "Governance" },
 ];
