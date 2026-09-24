@@ -112,6 +112,12 @@ class Settings(BaseSettings):
     s3_region: str = "auto"
     s3_access_key_id: str = ""
     s3_secret_access_key: str = ""
+    # Provider compatibility. Defaults keep the original behaviour (AWS/R2).
+    # OCI Object Storage's S3-compatible endpoint wants path-style URLs, and
+    # always encrypts objects at rest itself, so the SSE request header can
+    # be switched off there ("" = don't send it).
+    s3_addressing_style: Literal["auto", "path", "virtual"] = "auto"
+    s3_server_side_encryption: str = "AES256"
 
     # --- ClamAV ---
     clamav_host: str = "clamav"

@@ -15,6 +15,7 @@ still ciphertext either way.
 import asyncio
 
 import boto3
+from botocore.config import Config
 from botocore.exceptions import ClientError
 
 from app.core.config import get_settings
@@ -31,8 +32,19 @@ class S3CompatibleStorage(StorageBackend):
             region_name=settings.s3_region,
             aws_access_key_id=settings.s3_access_key_id or None,
             aws_secret_access_key=settings.s3_secret_access_key or None,
+            config=Config(
+                signature_version="s3v4",
+                s3={"addressing_style": settings.s3_addressing_style},
+            ),
         )
         self._bucket = settings.s3_bucket
+        # Application-level AES-256-GCM encryption happens before bytes reach
+        # this module either way; this only controls the provider-side header.
+        self._sse_args = (
+            {"ServerSideEncryption": settings.s3_server_side_encryption}
+            if settings.s3_server_side_encryption
+            else {}
+        )
 
     async def save(self, key: str, data: bytes) -> None:
         def _put() -> None:
@@ -40,7 +52,7 @@ class S3CompatibleStorage(StorageBackend):
                 Bucket=self._bucket,
                 Key=key,
                 Body=data,
-                ServerSideEncryption="AES256",
+                **self._sse_args,
             )
 
         await asyncio.to_thread(_put)
