@@ -18,6 +18,7 @@ Security notes on running scanners against uploaded content:
   - Scans run in a dedicated temp directory, deleted afterward regardless
     of success or failure.
 """
+import asyncio
 import json
 import logging
 import subprocess
@@ -28,6 +29,7 @@ from pathlib import Path
 from sqlalchemy import select
 
 from app.core.file_encryption import decrypt_bytes
+from app.services.heavy_jobs import heavy_job
 from app.db.session import AsyncSessionLocal
 from app.models.code_finding import CodeFinding
 from app.models.document import Document
@@ -38,6 +40,16 @@ logger = logging.getLogger("secureai.code_review")
 
 _SEMGREP_RULES_PATH = "/app/semgrep-rules/security-rules.yaml"
 _SCAN_TIMEOUT_SECONDS = 60
+# Largest file the code scanners will accept. Real source files are almost
+# always far smaller; a bigger one (a 1.2MB, 25,000-line stress fixture) was
+# measured to push the scanners past Render's 512MB. Enforced at the scan
+# endpoint (clear 413) and again here as a backstop.
+MAX_SCAN_BYTES = 500_000
+# Semgrep's own engine limits: cap its memory (MiB) and run a single job, so
+# an oversized input makes Semgrep fail cleanly instead of the whole backend
+# being OOM-killed. Per-rule timeout in seconds.
+_SEMGREP_MAX_MEMORY_MB = 200
+_SEMGREP_RULE_TIMEOUT_SECONDS = 30
 _SEMGREP_LANGUAGE_EXTENSIONS = {".py", ".js", ".ts", ".jsx", ".tsx"}
 
 
@@ -66,7 +78,17 @@ def _run_semgrep(file_path: Path) -> list[dict]:
     env = {**os.environ, "HOME": "/tmp"}  # nosec B108 - subprocess-only, single-tenant container, no sensitive data written; see comment above
 
     result = subprocess.run(
-        ["semgrep", "scan", "--config", _SEMGREP_RULES_PATH, "--json", "--quiet", str(file_path)],
+        [
+            "semgrep", "scan", "--config", _SEMGREP_RULES_PATH, "--json", "--quiet",
+            # Uploaded code is scanned locally only: no usage metrics, no
+            # update check - nothing about it goes to a third party.
+            "--metrics", "off", "--disable-version-check",
+            "--max-memory", str(_SEMGREP_MAX_MEMORY_MB),
+            "-j", "1",
+            "--timeout", str(_SEMGREP_RULE_TIMEOUT_SECONDS),
+            "--max-target-bytes", str(MAX_SCAN_BYTES),
+            str(file_path),
+        ],
         capture_output=True, text=True, timeout=_SCAN_TIMEOUT_SECONDS, env=env,
     )
     if not result.stdout:
@@ -76,7 +98,6 @@ def _run_semgrep(file_path: Path) -> list[dict]:
     except json.JSONDecodeError:
         logger.error("Semgrep produced non-JSON output: %s", result.stderr[:500])
         return []
-    return data.get("results", [])
     return data.get("results", [])
 
 
@@ -127,6 +148,14 @@ async def scan_document(document_id: uuid.UUID) -> None:
             storage = get_storage_backend()
             encrypted = await storage.load(doc.storage_path)
             plaintext = decrypt_bytes(encrypted)
+            if len(plaintext) > MAX_SCAN_BYTES:
+                logger.warning(
+                    "Code scan skipped for document_id=%s: %d bytes exceeds the %d-byte limit",
+                    document_id, len(plaintext), MAX_SCAN_BYTES,
+                )
+                doc.code_scan_status = "failed"
+                await db.commit()
+                return
 
             ext = "." + doc.sanitized_filename.rsplit(".", 1)[-1]
 
@@ -136,10 +165,17 @@ async def scan_document(document_id: uuid.UUID) -> None:
                 target_file.write_bytes(plaintext)
 
                 findings: list[dict] = []
-                if ext == ".py":
-                    findings.extend(_normalize_bandit(f) for f in _run_bandit(target_file))
-                if ext in _SEMGREP_LANGUAGE_EXTENSIONS:
-                    findings.extend(_normalize_semgrep(f) for f in _run_semgrep(target_file))
+                # Scanners are blocking subprocess calls: run directly, they froze
+                # the whole event loop (every request timed out) for the length of
+                # the scan. They now run in a worker thread, and under the
+                # heavy-job lock so a scan never overlaps an embedding run.
+                async with heavy_job():
+                    if ext == ".py":
+                        bandit_results = await asyncio.to_thread(_run_bandit, target_file)
+                        findings.extend(_normalize_bandit(f) for f in bandit_results)
+                    if ext in _SEMGREP_LANGUAGE_EXTENSIONS:
+                        semgrep_results = await asyncio.to_thread(_run_semgrep, target_file)
+                        findings.extend(_normalize_semgrep(f) for f in semgrep_results)
 
             # Clear any prior findings for this document before inserting fresh
             # ones, so re-scanning doesn't accumulate duplicates.

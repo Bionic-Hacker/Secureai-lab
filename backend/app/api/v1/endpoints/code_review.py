@@ -43,6 +43,13 @@ async def trigger_scan(
             f"Code review supports {sorted(_SCANNABLE_EXTENSIONS)} — this document is {ext}.",
         )
 
+    if doc.size_bytes > code_scan_service.MAX_SCAN_BYTES:
+        raise HTTPException(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            f"This file is too large to scan ({doc.size_bytes // 1024} KB). "
+            f"Code review accepts files up to {code_scan_service.MAX_SCAN_BYTES // 1024} KB.",
+        )
+
     doc.code_scan_status = "scanning"
     await audit_record(
         db, event_type="code_scan_triggered", event_category="ai",

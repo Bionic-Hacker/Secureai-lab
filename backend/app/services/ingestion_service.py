@@ -48,7 +48,10 @@ async def ingest_document(document_id: uuid.UUID) -> None:
             if not chunks:
                 raise ValueError("Document produced zero chunks after extraction/chunking.")
 
-            vectors = await embeddings.embed_texts(chunks)
+            from app.services.heavy_jobs import heavy_job
+
+            async with heavy_job():  # never overlaps a code scan (see heavy_jobs.py)
+                vectors = await embeddings.embed_texts(chunks)
             vector_store.add_chunks(
                 document_id=doc.id,
                 owner_id=doc.owner_id,
